@@ -100,7 +100,7 @@ jobs:
         run: |
            jf evd create --predicate=api_test_run.json --predicate-type=https://jfrog.com/evidence/test-results/v1 \
            --package-name ejs-demo --package-version ${{ github.run_number }} --package-repo-name dev-oci \
-           --key private.pem --key-alias dro-rlm-demo --markdown test-results.md --project=${{ vars.JF_PROJECT_KEY }}
+           --key private.pem --key-alias Evidence --markdown test-results.md --project=${{ vars.JF_PROJECT_KEY }}
       - name: Sign build evidence
         run: |
           echo '🔎 Evidence attached: `build-signature` 🔏 ' >> $GITHUB_STEP_SUMMARY
