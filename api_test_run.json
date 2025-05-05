@@ -15,7 +15,7 @@
 		{
 			"id": "be28815c-8a72-4833-b0ae-8a97e8e21598",
 			"name": "[RT] Get System version acces token version",
-			"url": "https://solengeu.jfrog.io/artifactory/api/system/version",
+			"url": "https://artifactory.rodolphef.org/artifactory/api/system/version",
 			"time": 335,
 			"responseCode": {
 				"code": 200,

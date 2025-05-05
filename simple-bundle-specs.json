@@ -3,7 +3,7 @@
       {
         "build": "gh-ejs-demo",
         "includeDeps": "false",
-        "project": "dro"
+        "project": "demo-1"
       }
     ]
   }

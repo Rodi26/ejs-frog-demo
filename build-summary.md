@@ -8,7 +8,7 @@
 
 ## Build Status
 
-- **Registry:** `solengeu.jfrog.io/dro-oci-dev-local/`
+- **Registry:** `artifactory.rodlphef.org/dev-oci/`
 
 ## Steps Summary
 1. **Checkout Code**
@@ -19,7 +19,7 @@
    - Status: ✅ Success
 4. **Build and Push Docker Image**
    - Status: ✅ Success
-   - Image URL: `solengeu.jfrog.io/dro-oci-dev-local/ejs-demo:latest`
+   - Image URL: `artifactory.rodlphef.org/dev-oci/ejs-demo:latest`
 
 ## Logs
 <details>
