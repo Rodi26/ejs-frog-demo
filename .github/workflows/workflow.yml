@@ -15,7 +15,7 @@ jobs:
   gh-ejs-demo:
     runs-on: ubuntu-latest
     env:
-      DOCKER_REPO: 'dro-oci-dev-local'
+      DOCKER_REPO: 'dev-oci'
       IMAGE_NAME: 'ejs-demo:${{ github.run_number }}'
       JF_URL: https://${{ vars.JF_HOST }}/
       JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
@@ -40,19 +40,19 @@ jobs:
           JF_URL: https://${{ vars.JF_HOST }}/
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
         with:
-            oidc-provider-name: davidro-github-integration
-            oidc-audience: davidro-github
+            oidc-provider-name: rodolphef-github-integration
+            oidc-audience: rodolphef-github
       - name: Checkout the repository    
         uses: actions/checkout@v4      
       - name: NPM Audit 
         run: |
           jf rt bce 
           jf rt bag
-          jf npmc --repo-resolve dro-npm-remote
+          jf npmc --repo-resolve dev-npm-remote
           jf ca
           jf npm cache clean --force
           rm package-lock.json
-          jf npmc --repo-resolve dro-npm-unsecure-remote
+          jf npmc --repo-resolve dev-npm-unsecure-remote
           jf npm i --omit dev 
           jf audit --npm --fail=false
       
