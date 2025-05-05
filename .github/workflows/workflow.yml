@@ -98,16 +98,16 @@ jobs:
       - name: Create test evidence
         id: create-evd  
         run: |
-           jf evd create --predicate=api_test_run.json --predicate-type=https://jfrog.com/evidence/test-results/v1 \
-           --package-name ejs-demo --package-version ${{ github.run_number }} --package-repo-name dev-oci \
-           --key private.pem --key-alias Evidence --markdown test-results.md --project=${{ vars.JF_PROJECT_KEY }}
+          jf evd create --predicate=api_test_run.json --predicate-type=https://jfrog.com/evidence/test-results/v1 \
+          --package-name ejs-demo --package-version ${{ github.run_number }} --package-repo-name dev-oci \
+          --key private.pem --key-alias ejs-frog-demo --markdown test-results.md --project=${{ vars.JF_PROJECT_KEY }}
       - name: Sign build evidence
         run: |
           echo '🔎 Evidence attached: `build-signature` 🔏 ' >> $GITHUB_STEP_SUMMARY
           echo '{ "build-actor": "${{ github.actor }}", "date": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'" }' > build-sign.json
           jf evd create --build-name ${{ github.workflow }} --build-number ${{ github.run_number }} \
             --predicate ./build-sign.json --predicate-type https://jfrog.com/evidence/build-signature/v1 \
-            --key private.pem  --key-alias Evidence --project=${{ vars.JF_PROJECT_KEY }} --markdown build-summary.md
+            --key private.pem  --key-alias ejs-frog-demo --project=${{ vars.JF_PROJECT_KEY }} --markdown build-summary.md
           
       - name: Create release-bundle and add evidence
         id: create-bundle  
@@ -115,7 +115,7 @@ jobs:
            jf rbc --spec=./simple-bundle-specs.json RlmEjsDemo 1.${{ github.run_number }}.0 --sync=true --signing-key default-rsa-key
            jf evd create --predicate ./feature.json --predicate-type=https://jfrog.com/evidence/test-results/v1 \
            --release-bundle RlmEjsDemo  --release-bundle-version 1.${{ github.run_number }}.0 \
-           --key private.pem  --key-alias Evidence --project=${{ vars.JF_PROJECT_KEY }} --markdown feature-flags.md
+           --key private.pem  --key-alias ejs-frog-demo --project=${{ vars.JF_PROJECT_KEY }} --markdown feature-flags.md
   provenance:
         needs: [gh-ejs-demo]
         uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
