@@ -115,5 +115,5 @@ jobs:
           # JF_GIT_EMAIL_AUTHOR: ""
 
         with:
-          oidc-provider-name: davidro-github-integration
-          oidc-audience: davidro-github
+          oidc-provider-name: rodolphef-github-integration
+          oidc-audience: rodolphef-github
