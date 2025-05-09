@@ -31,4 +31,4 @@ jobs:
         echo BUNDLE VERSION ${{ github.event.client_payload.version }}
         jf evd create --predicate ./mep.json --predicate-type=https://jfrog.com/evidence/approval/v1 \
            --release-bundle ${{ github.event.client_payload.name }}  --release-bundle-version ${{ github.event.client_payload.version }} \
-           --key private.pem  --key-alias dro-rlm-demo --project=${{ vars.JF_PROJECT_KEY }} --markdown mep.md
+           --key private.pem  --key-alias ejs-frog-demo --project=${{ vars.JF_PROJECT_KEY }} --markdown mep.md

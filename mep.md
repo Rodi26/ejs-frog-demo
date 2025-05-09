@@ -4,7 +4,7 @@
 - **Deploy mode:** Argo CD
 - **Status:** `OK`
 - **Namespace:** `demo`
-- **Cluster:** `soleng-runtime-demo`
+- **Cluster:** `cluster2`
 - **Service URL:** `https://my-service.org`
 
 

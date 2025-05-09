@@ -3,6 +3,6 @@
     "version": "1.0.0",
     "description": "demo rlm package",
     "namespace":  "demo",
-    "cluster": "artifactory-rodolphef.org",
+    "cluster": "cluster2",
     "time": "1744629374"
 }
