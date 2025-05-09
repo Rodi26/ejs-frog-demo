@@ -3,6 +3,6 @@
     "version": "1.0.0",
     "description": "demo rlm package",
     "namespace":  "demo",
-    "cluster": "soleng-runtime-demo",
+    "cluster": "artifactory-rodolphef.org",
     "time": "1744629374"
 }
