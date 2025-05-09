@@ -112,7 +112,7 @@ jobs:
       - name: Create release-bundle and add evidence
         id: create-bundle  
         run: |
-           jf rbc --spec=./simple-bundle-specs.json RlmEjsDemo 1.${{ github.run_number }}.0 --sync=true --signing-key dist
+           jf rbc --spec=./simple-bundle-specs.json RlmEjsDemo 1.${{ github.run_number }}.0 --sync=true --signing-key Distribute
            jf evd create --predicate ./feature.json --predicate-type=https://jfrog.com/evidence/test-results/v1 \
            --release-bundle RlmEjsDemo  --release-bundle-version 1.${{ github.run_number }}.0 \
            --key private.pem  --key-alias ejs-frog-demo --project=${{ vars.JF_PROJECT_KEY }} --markdown feature-flags.md
