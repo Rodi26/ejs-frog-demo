@@ -1,7 +1,7 @@
 {
     "distribution_rules": [
         {
-        "site_name": "SolEngEdgeSaaS",
+        "site_name": "edge",
         "city_name": "",
         "country_codes": ["*"]
         }
