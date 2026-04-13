@@ -32,7 +32,7 @@ jobs:
       - name: Install Node
         uses: actions/setup-node@v3
         with:
-            node-version: 18 
+            node-version: 24 
       - name: Setup JFrog CLI
         id: setup-cli
         uses: jfrog/setup-jfrog-cli@v4
