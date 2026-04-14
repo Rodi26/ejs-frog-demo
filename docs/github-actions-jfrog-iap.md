@@ -47,6 +47,8 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 - **Self-hosted GitHub runners** (or VPN) so CI traffic does not hit public IAP like a random Internet client, or  
 - **Programmatic IAP** (service account or workload identity issuing tokens for your IAP OAuth client audience) — see [Google Cloud IAP authentication overview](https://cloud.google.com/iap/docs/authentication-howto).
 
+**Step-by-step (GitHub Actions + audience OAuth + SA / WIF) :** [iap-programmatic-auth-github-actions.md](iap-programmatic-auth-github-actions.md).
+
 Until traffic from GitHub-hosted runners can satisfy IAP (or bypass it for that endpoint), **`jf`** will keep failing **before** JFrog evaluates `JF_ACCESS_TOKEN`.
 
 ## References

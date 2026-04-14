@@ -96,6 +96,12 @@ Les corrections **se décident** avec l’équipe sécurité / GCP. Voici des **
 
 ---
 
+## 5 bis — Auth IAP programmatique (compte de service / WIF + audience OAuth)
+
+Si la politique impose de **garder IAP** et d’automatiser quand même : guide pas à pas (Google + GitHub Actions) dans [iap-programmatic-auth-github-actions.md](iap-programmatic-auth-github-actions.md).
+
+---
+
 ## 6. Étape D — Après changement infra : valider le workflow
 
 1. Déclencher **workflow_dispatch** (ou push) sur la branche de test.
