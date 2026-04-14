@@ -25,17 +25,17 @@ jobs:
     # Here we install all the tools : docker buildx, QEMU, JDK 11, JFrog CLI
     steps:
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3      
+        uses: docker/setup-buildx-action@v4
       - name: Install Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
             node-version: 24 
       - name: Setup JFrog CLI
         id: setup-cli
-        uses: jfrog/setup-jfrog-cli@v4
+        uses: jfrog/setup-jfrog-cli@v5
         env:
           JF_URL: https://${{ vars.JF_HOST }}/
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
@@ -57,7 +57,7 @@ jobs:
           jf audit --npm --fail=false
       
       - name: Authenticate Docker
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ vars.JF_HOST }}
           username: ${{ steps.setup-cli.outputs.oidc-user }}

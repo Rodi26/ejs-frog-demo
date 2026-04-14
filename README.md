@@ -5,6 +5,10 @@
 ## Overview
 This a demo Express JS application to illustrate how a critical vulnerability can be exploited and how it could have been detected and remediated using [Jfrog Advanced Security](https://jfrog.com/advanced-security/) new features.
 
+## GitHub Actions and JFrog (IAP)
+
+If the JFrog instance used by workflows sits behind **Google Cloud IAP**, jobs on GitHub-hosted runners may fail (network path not suited to non-interactive CI). Short context: [docs/github-actions-jfrog-iap.md](docs/github-actions-jfrog-iap.md). **Step-by-step playbook (reusable across repos):** [docs/playbook-iap-github-actions.md](docs/playbook-iap-github-actions.md).
+
 
    <img src="https://github.com/muldos/vuln-express/raw/master/images/home.png" alt="Home page overview" width="100%" style="margin: 20px;"/>
 
