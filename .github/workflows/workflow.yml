@@ -4,6 +4,8 @@ on:
     - cron: "30 8 * * *"  
   workflow_dispatch:
 permissions:
+  # Required: explicit permissions default unlisted scopes to "none". SLSA generator needs OIDC.
+  id-token: write
   contents: write
   # required for all workflows
   security-events: write
