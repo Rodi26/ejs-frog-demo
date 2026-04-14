@@ -41,7 +41,19 @@ jobs:
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
       - name: Checkout the repository    
-        uses: actions/checkout@v4      
+        uses: actions/checkout@v4
+      - name: Verify JFrog connection and visible repositories
+        run: |
+          set -euo pipefail
+          echo "JF_URL (from job env — compare with the browser bar for your Artifactory): ${JF_URL}"
+          echo "--- jf rt ping ---"
+          jf rt ping
+          echo "--- Repositories this token can see (npm-related keys) ---"
+          if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
+            echo "::error::Could not call Artifactory API — wrong JF_URL, network, or token."
+            exit 1
+          fi
+          ruby -rjson -e 'raw=File.read("repos.json"); j=JSON.parse(raw); k=j.map{|r| r["key"]}; puts k.grep(/npm/i).sort; puts "---"; ok=k.include?("dev-npm"); puts "Contains dev-npm: #{ok}"; warn "::warning::API list has no dev-npm — check vars.JF_HOST matches this instance, token scope, and Project access." unless ok'
       - name: NPM Audit 
         run: |
           jf rt bce 

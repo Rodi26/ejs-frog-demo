@@ -26,6 +26,12 @@ Usual approaches are architectural, for example:
 
 This repo cannot “fix” IAP through YAML alone; it documents the constraint so diagnosis and ownership stay clear.
 
+## “Repository does not exist” while it exists in the UI
+
+`vars.JF_HOST` must be the **same host** you use in the browser to open Artifactory (hostname only, e.g. `artifactory.example.org`). The workflow builds `JF_URL` as `https://<JF_HOST>/`.
+
+If the CLI is pointed at **another** instance (typo, old variable, or duplicate deployment), the API will not list `dev-npm` even though it exists elsewhere. The **Verify JFrog connection** step in [`workflow.yml`](../.github/workflows/workflow.yml) runs `jf rt ping` and lists **npm-related repository keys** visible to **`JF_ACCESS_TOKEN`**. If `dev-npm` is missing from that list, fix **URL**, **token scope**, or **Project / permission** assignment before changing `--repo-resolve` names.
+
 ## References
 
 - [GitHub Blog — Node 20 deprecation on Actions runners](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)
