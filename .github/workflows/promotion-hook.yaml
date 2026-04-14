@@ -1,8 +1,6 @@
 on:
   repository_dispatch:
     types: promotion-process
-permissions:
-  id-token: write
 name: attach-evd
 jobs:
   deploy:
@@ -13,14 +11,11 @@ jobs:
       JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
     steps:
     - name: Setup JFrog CLI
-      id: setup-cli
       uses: jfrog/setup-jfrog-cli@v5
       env:
         JF_URL: https://${{ vars.JF_HOST }}/
         JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
-      with:
-        oidc-provider-name: rodolphef-github-integration
-        oidc-audience: rodolphef-github
+        JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
     - name: Checkout the repository      
       uses: actions/checkout@v4           
     - name: process data received

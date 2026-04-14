@@ -4,7 +4,6 @@ on:
     - cron: "30 8 * * *"  
   workflow_dispatch:
 permissions:
-  id-token: write
   contents: write
   # required for all workflows
   security-events: write
@@ -34,14 +33,11 @@ jobs:
         with:
             node-version: 24 
       - name: Setup JFrog CLI
-        id: setup-cli
         uses: jfrog/setup-jfrog-cli@v5
         env:
           JF_URL: https://${{ vars.JF_HOST }}/
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
-        with:
-            oidc-provider-name: rodolphef-github-integration
-            oidc-audience: rodolphef-github
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
       - name: Checkout the repository    
         uses: actions/checkout@v4      
       - name: NPM Audit 
@@ -57,11 +53,7 @@ jobs:
           jf audit --npm --fail=false
       
       - name: Authenticate Docker
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ vars.JF_HOST }}
-          username: ${{ steps.setup-cli.outputs.oidc-user }}
-          password: ${{ steps.setup-cli.outputs.oidc-token }}
+        run: jf docker login ${{ vars.JF_HOST }}
       # docker image build
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
@@ -84,7 +76,7 @@ jobs:
           echo "digest=$(docker images --no-trunc --quiet ${{ vars.JF_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }})" >> $GITHUB_OUTPUT
           jf docker pull ${{ vars.JF_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
           jf docker scan --fail=false  --threads=5 ${{ vars.JF_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }} --severity='HIGH,CRITICAL' --vuln --format=sarif > jfrog_docker_scan.sarif
-          sed -i s/"\"uri\": \"\""/"\"uri\": \"${{ vars.JF_URL }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}:${{ github.run_number }}\""/g jfrog_docker_scan.sarif
+          sed -i s/"\"uri\": \"\""/"\"uri\": \"https:\/\/${{ vars.JF_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}:${{ github.run_number }}\""/g jfrog_docker_scan.sarif
         # adding the built docker into the JFrog build info     
       - name: Upload output to generate autofix
         uses: github/codeql-action/upload-sarif@v3

@@ -25,7 +25,7 @@ Ce document décrit une **méthode pas à pas** pour diagnostiquer et corriger d
 - [ ] **URL exacte** utilisée par le workflow (variable `JF_HOST`, `REGISTRY_URL`, etc.).
 - [ ] **Produit** derrière l’URL (JFrog, Artifact Registry, API custom, …).
 - [ ] **IAP** est-il **documenté** comme actif sur ce hostname ou ce load balancer ? (équipe plateforme / GCP).
-- [ ] Le workflow utilise **OIDC**, **token**, **Basic**, ou **rien** vers l’API ?
+- [ ] Le workflow utilise **OIDC**, **`JF_ACCESS_TOKEN`** (secret GitHub), **Basic**, ou **rien** vers l’API ? (Ce dépôt utilise **`vars.JF_HOST`** + **`secrets.JF_ACCESS_TOKEN`** avec `jfrog/setup-jfrog-cli`.)
 - [ ] Un **même job** fonctionne depuis un **runner auto-hébergé** ou une **machine interne** ?
 
 ---

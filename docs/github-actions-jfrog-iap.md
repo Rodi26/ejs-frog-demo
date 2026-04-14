@@ -2,9 +2,11 @@
 
 ## Context
 
-The [`gh-ejs-demo`](../.github/workflows/workflow.yml) workflow uses `jfrog/setup-jfrog-cli` with OIDC (`oidc-provider-name`, `oidc-audience`) and `JF_URL` pointing at the JFrog instance (`vars.JF_HOST`).
+The [`gh-ejs-demo`](../.github/workflows/workflow.yml) workflow uses `jfrog/setup-jfrog-cli` with **`JF_URL`** (`https://<JF_HOST>/` from **`vars.JF_HOST`**) and **`JF_ACCESS_TOKEN`** (`secrets.JF_ACCESS_TOKEN`). Docker uses the same CLI config via `jf docker login <JF_HOST>`.
 
-**There was no IAP documentation in this repository before**; this file is the single place for it.
+That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/integrations/docs/example-continuous-integration-between-github-actions-and-artifactory) (Platform access token). It avoids relying on OIDC from the runner when IAP or network policy blocks that path.
+
+**There was no IAP documentation in this repository before** the first version of this file; the playbook is [playbook-iap-github-actions.md](playbook-iap-github-actions.md).
 
 ## IAP and failures like “JFrog CLI exited with exit code 1”
 
