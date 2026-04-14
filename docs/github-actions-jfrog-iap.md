@@ -4,7 +4,7 @@
 
 The [`gh-ejs-demo`](../.github/workflows/workflow.yml) workflow uses `jfrog/setup-jfrog-cli` with **`JF_URL`** (`https://<JF_HOST>/` from **`vars.JF_HOST`**) and **`JF_ACCESS_TOKEN`** (`secrets.JF_ACCESS_TOKEN`). Docker uses the same CLI config via `jf docker login <JF_HOST>`.
 
-That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/integrations/docs/example-continuous-integration-between-github-actions-and-artifactory) (Platform access token). It avoids relying on OIDC from the runner when IAP or network policy blocks that path.
+That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/integrations/docs/example-continuous-integration-between-github-actions-and-artifactory) (Platform access token). It authenticates to **JFrog** once HTTP traffic reaches Artifactory. It does **not** satisfy **Google IAP** in front of the same URL — see the section **`401 Unauthorized` / Invalid IAP credentials** below.
 
 **There was no IAP documentation in this repository before** the first version of this file; the playbook is [playbook-iap-github-actions.md](playbook-iap-github-actions.md).
 
@@ -32,7 +32,25 @@ This repo cannot “fix” IAP through YAML alone; it documents the constraint s
 
 If the CLI is pointed at **another** instance (typo, old variable, or duplicate deployment), the API will not list `dev-npm` even though it exists elsewhere. The **Verify JFrog connection** step in [`workflow.yml`](../.github/workflows/workflow.yml) runs `jf rt ping` and lists **npm-related repository keys** visible to **`JF_ACCESS_TOKEN`**. If `dev-npm` is missing from that list, fix **URL**, **token scope**, or **Project / permission** assignment before changing `--repo-resolve` names.
 
+## `401 Unauthorized` — `Invalid IAP credentials: JWT signature is invalid`
+
+This response is produced by **Google Cloud IAP** in front of your hostname, **not** by JFrog. Request flow:
+
+1. **HTTPS hits the load balancer** → IAP validates a **Google IAP identity JWT** (issuer, signature, audience that IAP trusts).
+2. Only after IAP allows the request does traffic reach **Artifactory**, where **`JF_ACCESS_TOKEN`** is relevant.
+
+`JF_ACCESS_TOKEN` is a **JFrog Platform** token. IAP does **not** accept it as an IAP JWT, so `jf rt ping` can return **401** with **Invalid IAP credentials: JWT signature is invalid** even though the same JFrog token would work **if** the HTTP request reached Artifactory (for example after interactive login in a browser, or from a network path that bypasses IAP).
+
+**Implication:** this cannot be fixed by editing this repository’s YAML only. Someone with **GCP / networking** responsibility must change architecture or policy, for example:
+
+- a hostname or path for **API / CI** that is **not** behind IAP (subject to security review), or  
+- **Self-hosted GitHub runners** (or VPN) so CI traffic does not hit public IAP like a random Internet client, or  
+- **Programmatic IAP** (service account or workload identity issuing tokens for your IAP OAuth client audience) — see [Google Cloud IAP authentication overview](https://cloud.google.com/iap/docs/authentication-howto).
+
+Until traffic from GitHub-hosted runners can satisfy IAP (or bypass it for that endpoint), **`jf`** will keep failing **before** JFrog evaluates `JF_ACCESS_TOKEN`.
+
 ## References
 
+- [Google Cloud — Authenticate to IAP](https://cloud.google.com/iap/docs/authentication-howto)
 - [GitHub Blog — Node 20 deprecation on Actions runners](https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/)
 - [JFrog `setup-jfrog-cli`](https://github.com/jfrog/setup-jfrog-cli) (v5 uses Node 24 for the action runtime)

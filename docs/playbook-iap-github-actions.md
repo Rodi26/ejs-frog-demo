@@ -14,6 +14,8 @@ Ce document décrit une **méthode pas à pas** pour diagnostiquer et corriger d
 
 **Symptôme fréquent :** étape qui appelle un CLI ou `curl` vers `https://votre-service/` → **exit code 1**, timeout, HTML de login dans le corps de réponse, ou redirections en chaîne — **sans** message explicite « IAP » dans les logs GitHub.
 
+**Signature Google IAP (exemple réel) :** `401 Unauthorized` avec **`Invalid IAP credentials: JWT signature is invalid`** — IAP rejette le JWT (souvent un **Bearer** issu d’un autre produit, ex. jeton JFrog) avant que le backend ne réponde. Voir la section **401 / Invalid IAP credentials** dans [github-actions-jfrog-iap.md](github-actions-jfrog-iap.md).
+
 **À ne pas confondre :** avertissements du type **Node.js 20 deprecated** sur les *actions* GitHub ; c’est un sujet de **runtime des actions**, pas la cause d’un blocage IAP.
 
 ---
