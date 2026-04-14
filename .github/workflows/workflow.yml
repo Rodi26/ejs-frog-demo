@@ -4,6 +4,8 @@ on:
     - cron: "30 8 * * *"  
   workflow_dispatch:
 permissions:
+  # Required by slsa-github-generator (provenance): nested jobs need OIDC to the token service
+  id-token: write
   contents: write
   # required for all workflows
   security-events: write
