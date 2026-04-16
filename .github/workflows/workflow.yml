@@ -38,11 +38,23 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ vars.GCP_PROJECT_ID }}
+      # WIF credentials are not a "classic" SA key; gcloud print-identity-token --audiences
+      # rejects them ("Invalid account type"). Mint the IAP ID token via IAM Credentials API instead.
       - name: Issue Google ID token for IAP audience
         if: vars.IAP_USE_WIF == 'true'
+        env:
+          IAP_OAUTH_CLIENT_ID: ${{ vars.IAP_OAUTH_CLIENT_ID }}
+          GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          TOKEN=$(gcloud auth print-identity-token --audiences="${{ vars.IAP_OAUTH_CLIENT_ID }}")
+          ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          TOKEN="$(curl -sS -X POST \
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_WIF_SERVICE_ACCOUNT}:generateIdToken" \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"audience\": \"${IAP_OAUTH_CLIENT_ID}\", \"includeEmail\": true}" \
+            | jq -r '.token')"
+          test -n "${TOKEN}" && test "${TOKEN}" != "null"
           echo "::add-mask::$TOKEN"
           echo "IAP_ID_TOKEN=$TOKEN" >> "$GITHUB_ENV"
       - name: Set up QEMU
