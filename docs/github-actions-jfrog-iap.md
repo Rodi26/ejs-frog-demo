@@ -45,6 +45,18 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 
 **This repo’s approach:** set **`vars.JF_HOST_CLI`** (GitHub: **Settings → Secrets and variables → Actions → Variables**) to a hostname for the **same** instance where **`jf`** can use **`Authorization: Bearer`** alone (no IAP on that host). It **must differ** from **`vars.JF_HOST`**. The workflow pings **`JF_PUBLIC_URL`** (`vars.JF_HOST`) with **`IAP_GOOGLE_JWT`**, then runs **`jf`** against **`JF_URL`** (`https://<JF_HOST_CLI>/` when set).
 
+### If you cannot expose “a backend without IAP” (or it would not be public)
+
+“IAP off” on a URL does **not** have to mean “open to the whole Internet.” Common patterns that stay compatible with **`jf`** (Bearer only):
+
+1. **Same Artifactory, different hostname or load balancer** where **IAP is not enabled**, but **access is restricted** with a **VPC firewall**, **Cloud Armor**, or **source IP allowlists**. GitHub documents [GitHub-hosted runners](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners); the [`api.github.com/meta`](https://api.github.com/meta) JSON includes an **`actions`** array of CIDRs many teams allow toward a CI-facing VIP. Traffic is still routed over the public Internet from GitHub’s perspective, but the endpoint is not anonymously reachable.
+
+2. **Self-hosted GitHub Actions runners** (VM in your VPC, GKE, etc.) where the runner reaches Artifactory over **private IP**, **PSC**, **VPN**, or **Hybrid Connectivity**. Then **`jf`** does not need to traverse IAP at all for API/registry calls; you may still use **`vars.JF_HOST`** + WIF only to **prove** IAP for the public URL in a dedicated step.
+
+3. **Path- or service-splitting at the load balancer** (platform team): e.g. browser UI behind IAP while a **separate backend or URL map** exposes Artifactory API/registry to trusted sources only. That is still “another route” than pure IAP-on-`Authorization`, even if you do not call it a second “public” site.
+
+What **does not** work with GitHub-hosted runners and the stock **`jf`** client: a **single** hostname where **every** HTTPS request must present a **Google IAP JWT** in `Authorization` **and** Artifactory must see **`Authorization: Bearer` (JFrog)** — one header cannot carry both.
+
 **Implication:** if only a **single** IAP-protected hostname exists and you cannot add a CI-facing hostname, **`jf`** from GitHub-hosted runners will not match a supported dual-auth pattern; options remain:
 
 - a hostname or path for **API / CI** that is **not** behind IAP (subject to security review), or  

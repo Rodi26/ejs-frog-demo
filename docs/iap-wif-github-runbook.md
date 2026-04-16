@@ -116,6 +116,10 @@ Le job `gh-ejs-demo` de [.github/workflows/workflow.yml](../.github/workflows/wo
 
 Le **`curl`** valide la **couche IAP** sur **`JF_PUBLIC_URL`** ; **`jf`** et le registry utilisent **`JF_URL`** / **`JF_REGISTRY_HOST`** (`JF_HOST_CLI` si défini, sinon **`JF_HOST`**).
 
+### Si vous ne pouvez pas « exposer sans IAP » un second hostname
+
+**Sans IAP** pour **`jf`** ne veut pas dire **ouvert à tout le monde** : on peut désactiver IAP sur un **autre** nom DNS / VIP et n’autoriser que des **plages IP** (pare-feu, Cloud Armor, liste GitHub Actions — voir la doc GitHub sur les IP des runners hébergés) ou utiliser des **runners self-hosted** dans le VPC. Détail et formulations en anglais : [github-actions-jfrog-iap.md — “If you cannot expose…”](github-actions-jfrog-iap.md).
+
 ---
 
 ## Dépannage
