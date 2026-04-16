@@ -31,13 +31,21 @@ if not UPSTREAM or not IAP_JWT:
 # Origin clients use to talk to this listener (Docker push/pull via insecure registry).
 _LOCAL_HTTP_ORIGIN = f"http://{BIND}"
 
+# Response headers whose values may contain absolute upstream URLs; clients would follow them
+# over HTTPS and bypass this proxy → IAP sees no Proxy-Authorization ("empty token").
+_HEADERS_REWRITE_UPSTREAM_URLS = frozenset(
+    {"www-authenticate", "location", "content-location"}
+)
 
-def _rewrite_www_authenticate(value: str) -> str:
+
+def _rewrite_upstream_absolute_urls(value: str) -> str:
     """
-    Docker registry clients follow OAuth token URLs from WWW-Authenticate (realm=...).
-    Upstream Artifactory returns an HTTPS realm on the public IAP hostname; fetching that
-    URL directly bypasses this forwarder and IAP returns HTML → 'invalid character <' in JSON.
-    Rewrite realm URLs so token requests stay on http://127.0.0.1:<port>/... and pass through us.
+    Replace https://<UPSTREAM>/... with http://<BIND>/... so clients (Docker/registry, npm)
+    keep talking to this forwarder, which adds Proxy-Authorization for IAP.
+
+    Used for:
+    - WWW-Authenticate (realm=... OAuth token URL)
+    - Location / Content-Location (redirects to blob upload URLs, etc.)
     """
     # Replace longer match first so :443 is not left behind as a bogus suffix.
     v = value.replace(f"https://{UPSTREAM}:443", _LOCAL_HTTP_ORIGIN)
@@ -92,8 +100,8 @@ class ForwardHandler(BaseHTTPRequestHandler):
             for hk, hv in resp.getheaders():
                 if hk.lower() in _hop_by_hop():
                     continue
-                if hk.lower() == "www-authenticate":
-                    hv = _rewrite_www_authenticate(hv)
+                if hk.lower() in _HEADERS_REWRITE_UPSTREAM_URLS:
+                    hv = _rewrite_upstream_absolute_urls(hv)
                 self.send_header(hk, hv)
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
