@@ -261,7 +261,25 @@ jobs:
           jf audit --npm --fail=false
       
       - name: Authenticate Docker
-        run: jf docker login ${{ env.JF_REGISTRY_HOST }}
+        env:
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
+            # jf docker login triggers the registry OAuth token flow; Docker then calls the realm URL on the
+            # public IAP host without Proxy-Authorization → HTML body → "invalid character '<'".
+            U="${{ vars.JF_DOCKER_USERNAME }}"
+            if [ -z "${U}" ]; then
+              U=$(jf rt curl -sS "/artifactory/api/security/user" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('name') or d.get('email') or '')")
+            fi
+            if [ -z "${U}" ]; then
+              echo "::error::Set Actions variable JF_DOCKER_USERNAME (Artifactory user), or ensure the token can call GET /artifactory/api/security/user."
+              exit 1
+            fi
+            echo "${JF_ACCESS_TOKEN}" | docker login "http://${JF_REGISTRY_HOST}" -u "${U}" --password-stdin
+          else
+            jf docker login ${{ env.JF_REGISTRY_HOST }}
+          fi
       # docker image build
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
