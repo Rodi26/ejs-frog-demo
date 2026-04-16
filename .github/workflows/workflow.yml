@@ -266,8 +266,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
-            # jf docker login triggers the registry OAuth token flow; Docker then calls the realm URL on the
-            # public IAP host without Proxy-Authorization → HTML body → "invalid character '<'".
+            # docker login probes /v2/ and may follow OAuth realm URLs on the public IAP host (HTML, not JSON).
+            # ~/.docker/config.json with Basic "auth" avoids that Bearer round-trip for push/pull via the proxy.
             U="${{ vars.JF_DOCKER_USERNAME }}"
             if [ -z "${U}" ]; then
               U=$(jf rt curl -sS "/artifactory/api/security/user" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('name') or d.get('email') or '')")
@@ -276,7 +276,8 @@ jobs:
               echo "::error::Set Actions variable JF_DOCKER_USERNAME (Artifactory user), or ensure the token can call GET /artifactory/api/security/user."
               exit 1
             fi
-            echo "${JF_ACCESS_TOKEN}" | docker login "http://${JF_REGISTRY_HOST}" -u "${U}" --password-stdin
+            export DOCKER_USERNAME="$U"
+            python3 -c 'import base64,json,os; from pathlib import Path; h=os.environ["JF_REGISTRY_HOST"].strip(); u=os.environ["DOCKER_USERNAME"].strip(); t=os.environ["JF_ACCESS_TOKEN"].strip(); b=base64.b64encode((u+":"+t).encode()).decode(); c={"auths":{h:{"auth":b},"http://"+h:{"auth":b}}}; Path.home().joinpath(".docker").mkdir(parents=True, exist_ok=True); Path.home().joinpath(".docker","config.json").write_text(json.dumps(c), encoding="utf-8"); print("Wrote ~/.docker/config.json with Basic auth for", h)'
           else
             jf docker login ${{ env.JF_REGISTRY_HOST }}
           fi
