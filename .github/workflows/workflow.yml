@@ -3,6 +3,10 @@ on:
   schedule:
     - cron: "30 8 * * *"  
   workflow_dispatch:
+# One run per branch at a time: parallel gh-ejs-demo runs all hit the same JFrog+IAP proxy and look "stuck" for 10–20+ min on npm.
+concurrency:
+  group: gh-ejs-demo-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   # Required: explicit permissions default unlisted scopes to "none". SLSA generator needs OIDC.
   id-token: write
@@ -225,7 +229,10 @@ jobs:
           warn "::warning::API list has no dev-npm — check vars.JF_HOST / JF_HOST_CLI, token scope, and Project access." unless ok
           RUBY
       - name: NPM Audit 
+        timeout-minutes: 30
         run: |
+          set -euo pipefail
+          echo "NPM via JFrog (+ IAP proxy when set): resolving deps can take many minutes; this is not a hang."
           jf rt bce 
           jf rt bag
           jf npmc --repo-resolve dev-npm
