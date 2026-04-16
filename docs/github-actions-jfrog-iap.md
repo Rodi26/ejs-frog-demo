@@ -14,6 +14,8 @@ If **`IAP_USE_WIF`** is false or there is no IAP, **`JF_HOST_CLI`** empty means 
 
 That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/integrations/docs/example-continuous-integration-between-github-actions-and-artifactory) (Platform access token). It authenticates to **JFrog** once HTTP traffic reaches Artifactory.
 
+**Frogbot** ([`frogbot-scan-repository.yaml`](../.github/workflows/frogbot-scan-repository.yaml), [`frogbot-scan-pr.yaml`](../.github/workflows/frogbot-scan-pr.yaml)) uses the same rules: when **`vars.IAP_USE_WIF`** is **`true`**, the workflow issues an IAP JWT (WIF + IAM Credentials `generateIdToken`), then either sets **`JF_URL`** to **`https://<JF_HOST_CLI>/`** or starts the local forwarder and sets **`JF_URL`** to **`http://127.0.0.1:<port>/`**. Frogbot only needs HTTP(S) to Artifactory (no Docker), so those workflows **do not** modify **`daemon.json`**. **`pull_request_target`** jobs must **`actions/checkout`** before the proxy step so [`scripts/iap-jf-forward-proxy.py`](../scripts/iap-jf-forward-proxy.py) exists on the runner.
+
 **There was no IAP documentation in this repository before** the first version of this file; the playbook is [playbook-iap-github-actions.md](playbook-iap-github-actions.md).
 
 ## IAP and failures like “JFrog CLI exited with exit code 1”

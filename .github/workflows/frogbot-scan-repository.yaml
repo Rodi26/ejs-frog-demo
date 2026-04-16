@@ -8,9 +8,18 @@ permissions:
   contents: write
   pull-requests: write
   security-events: write
+  # Required when vars.IAP_USE_WIF is true (google-github-actions/auth OIDC).
+  id-token: write
 jobs:
   scan-repository:
     runs-on: ubuntu-latest
+    env:
+      # Default JF_URL; overridden via GITHUB_ENV when IAP local proxy is used. See docs/github-actions-jfrog-iap.md
+      JF_URL: ${{ format('https://{0}/', vars.JF_HOST_CLI != '' && vars.JF_HOST_CLI || vars.JF_HOST) }}
+      JF_PUBLIC_HOST: ${{ vars.JF_HOST }}
+      JF_PUBLIC_URL: ${{ format('https://{0}/', vars.JF_HOST) }}
+      JF_IAP_PROXY_PORT: "18081"
+      JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
     strategy:
       matrix:
         # The repository scanning will be triggered periodically on the following branches.
@@ -19,96 +28,96 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
+      - name: Authenticate to Google Cloud (WIF)
+        if: vars.IAP_USE_WIF == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+      - name: Set up gcloud CLI
+        if: vars.IAP_USE_WIF == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - name: Issue Google ID token for IAP audience
+        if: vars.IAP_USE_WIF == 'true'
+        env:
+          IAP_OAUTH_CLIENT_ID: ${{ vars.IAP_OAUTH_CLIENT_ID }}
+          GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, os, subprocess, urllib.error, urllib.request
+          from urllib.parse import quote
+
+          sa = os.environ["GCP_WIF_SERVICE_ACCOUNT"].strip()
+          aud = os.environ["IAP_OAUTH_CLIENT_ID"].strip()
+          access = subprocess.check_output(
+              ["gcloud", "auth", "print-access-token"], text=True
+          ).strip()
+          url = (
+              "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
+              + quote(sa, safe="")
+              + ":generateIdToken"
+          )
+          body = json.dumps({"audience": aud, "includeEmail": True}).encode()
+          req = urllib.request.Request(url, data=body, method="POST")
+          req.add_header("Authorization", f"Bearer {access}")
+          req.add_header("Content-Type", "application/json")
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  out = json.load(resp)
+          except urllib.error.HTTPError as e:
+              raise SystemExit(f"generateIdToken failed HTTP {e.code}: {e.read().decode()}")
+          jwt = out.get("token")
+          if not jwt:
+              raise SystemExit(f"no token in response: {out}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as gh:
+              gh.write(f"IAP_GOOGLE_JWT={jwt}\n")
+          print("::add-mask::" + jwt)
+          PY
+      # Frogbot uses JF_URL like jf — no Proxy-Authorization; local forwarder adds IAP JWT upstream.
+      - name: Configure JFrog URL for IAP (proxy or JF_HOST_CLI)
+        if: vars.IAP_USE_WIF == 'true'
+        env:
+          IAP_GOOGLE_JWT: ${{ env.IAP_GOOGLE_JWT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${IAP_GOOGLE_JWT:-}" ]; then
+            echo "No IAP_GOOGLE_JWT; keeping job default JF_URL."
+            exit 0
+          fi
+          JF_CLI="${{ vars.JF_HOST_CLI }}"
+          if [ -n "${JF_CLI}" ]; then
+            echo "JF_IAP_PROXY_MODE=false" >> "${GITHUB_ENV}"
+            echo "Using JF_HOST_CLI for Frogbot: ${JF_CLI}"
+            exit 0
+          fi
+          echo "Starting local IAP forward proxy for Frogbot (API only; no Docker daemon change) ..."
+          export JF_UPSTREAM_HOST="${{ vars.JF_HOST }}"
+          nohup python3 "${GITHUB_WORKSPACE}/scripts/iap-jf-forward-proxy.py" >> /tmp/iap-jf-proxy.log 2>&1 &
+          echo $! > /tmp/iap-jf-proxy.pid
+          PORT="${JF_IAP_PROXY_PORT:-18081}"
+          for _ in $(seq 1 100); do
+            if (echo >/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null; then break; fi
+            sleep 0.1
+          done
+          if ! (echo >/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null; then
+            echo "::error::Local IAP proxy did not listen on 127.0.0.1:${PORT}. Log:"
+            cat /tmp/iap-jf-proxy.log || true
+            exit 1
+          fi
+          echo "JF_URL=http://127.0.0.1:${PORT}/" >> "${GITHUB_ENV}"
+          echo "JF_IAP_PROXY_MODE=true" >> "${GITHUB_ENV}"
       - uses: jfrog/frogbot@v2
         env:
           JF_CLI_LOG_LEVEL: "DEBUG"
-          # [Mandatory]
-          # JFrog platform URL
-          JF_URL: https://${{ vars.JF_HOST }}/
+          # JF_URL: from job env; when IAP proxy runs, GITHUB_ENV set JF_URL to http://127.0.0.1:<port>/
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
-          # [Mandatory]
-          # The GitHub token automatically generated for the job
           JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JF_GIT_BASE_BRANCH: ${{ matrix.branch }}
           JF_DEPS_REPO: "dev-npm-unsecure-remote"
-          # [Optional, default: https://api.github.com]
-          # API endpoint to GitHub
-          # JF_GIT_API_ENDPOINT: https://github.example.com
-
-          # [Optional]
-          # By default, the Frogbot workflows download the Frogbot executable as well as other tools
-          # needed from https://releases.jfrog.io
-          # If the machine that runs Frogbot has no access to the internet, follow these steps to allow the
-          # executable to be downloaded from an Artifactory instance, which the machine has access to:
-          #
-          # 1. Login to the Artifactory UI, with a user which has admin credentials.
-          # 2. Create a Remote Repository with the following properties set.
-          #    Under the 'Basic' tab:
-          #       Package Type: Generic
-          #       URL: https://releases.jfrog.io
-          #    Under the 'Advanced' tab:
-          #       Uncheck the 'Store Artifacts Locally' option
-          # 3. Set the value of the 'JF_RELEASES_REPO' variable with the Repository Key you created.
-          # JF_RELEASES_REPO: ""
-
-          ##########################################################################
-          ##   If your project uses a 'frogbot-config.yml' file, you can define   ##
-          ##   the following variables inside the file, instead of here.          ##
-          ##########################################################################
-
-          # [Optional, default: "."]
-          # Relative path to the root of the project in the Git repository
-          # JF_WORKING_DIR: path/to/project/dir
-
-          # [Optional]
-          # Xray Watches. Learn more about them here: https://www.jfrog.com/confluence/display/JFROG/Configuring+Xray+Watches
-          # JF_WATCHES: <watch-1>,<watch-2>...<watch-n>
-
-          # [Optional]
-          # JFrog project. Learn more about it here: https://www.jfrog.com/confluence/display/JFROG/Projects
-          # JF_PROJECT: <project-key>
-
-          # [Optional, default: "TRUE"]
-          # Fails the Frogbot task if any security issue is found.
-          # JF_FAIL: "FALSE"
-
-          # [Optional]
-          # Frogbot will download the project dependencies if they're not cached locally. To download the
-          # dependencies from a virtual repository in Artifactory, set the name of the repository. There's no
-          # need to set this value, if it is set in the frogbot-config.yml file.
-          # JF_DEPS_REPO: ""
-
-          # [Optional]
-          # Template for the branch name generated by Frogbot when creating pull requests with fixes.
-          # The template must include ${BRANCH_NAME_HASH}, to ensure that the generated branch name is unique.
-          # The template can optionally include the ${IMPACTED_PACKAGE} and ${FIX_VERSION} variables.
-          # JF_BRANCH_NAME_TEMPLATE: "frogbot-${IMPACTED_PACKAGE}-${BRANCH_NAME_HASH}"
-
-          # [Optional]
-          # Template for the commit message generated by Frogbot when creating pull requests with fixes
-          # The template can optionally include the ${IMPACTED_PACKAGE} and ${FIX_VERSION} variables.
-          # JF_COMMIT_MESSAGE_TEMPLATE: "Upgrade ${IMPACTED_PACKAGE} to ${FIX_VERSION}"
-
-          # [Optional]
-          # Template for the pull request title generated by Frogbot when creating pull requests with fixes.
-          # The template can optionally include the ${IMPACTED_PACKAGE} and ${FIX_VERSION} variables.
           JF_PULL_REQUEST_TITLE_TEMPLATE: "[🐸 Frogbot-Automatic PR] - Aggregated findings"
-
-          # [Optional, Default: "FALSE"]
-          # If TRUE, Frogbot creates a single pull request with all the fixes.
-          # If FALSE, Frogbot creates a separate pull request for each fix.
           JF_GIT_AGGREGATE_FIXES: "TRUE"
-          JF_INCLUDE_ALL_VULNERABILITIES: "TRUE"          
-          JF_FAIL: "FALSE" 
-          # [Optional, Default: "FALSE"]
-          # Handle vulnerabilities with fix versions only
-          # JF_FIXABLE_ONLY: "TRUE"
-
-          # [Optional]
-          # Set the minimum severity for vulnerabilities that should be fixed and commented on in pull requests
-          # The following values are accepted: Low, Medium, High or Critical
-          # JF_MIN_SEVERITY: ""
-
-          # [Optional, Default: eco-system+frogbot@jfrog.com]
-          # Set the email of the commit author
-          # JF_GIT_EMAIL_AUTHOR: ""
+          JF_INCLUDE_ALL_VULNERABILITIES: "TRUE"
+          JF_FAIL: "FALSE"
