@@ -19,6 +19,7 @@ jobs:
       DOCKER_REPO: 'dev-oci'
       IMAGE_NAME: 'ejs-demo:${{ github.run_number }}'
       # Public/browser hostname (IAP). WIF + curl ping this URL.
+      JF_PUBLIC_HOST: ${{ vars.JF_HOST }}
       JF_PUBLIC_URL: ${{ format('https://{0}/', vars.JF_HOST) }}
       # Registry + jf API: must allow Authorization: Bearer <JFrog token>. If Artifactory is behind IAP,
       # set vars.JF_HOST_CLI to another hostname for the same instance (internal LB, no IAP on that host).
@@ -108,8 +109,9 @@ jobs:
           JF_HAVE_CLI_HOST: ${{ vars.JF_HOST_CLI != '' }}
         run: |
           set -euo pipefail
-          echo "JF_PUBLIC_URL (IAP / browser): ${JF_PUBLIC_URL}"
-          echo "JF_URL (jf + registry): ${JF_URL}"
+          echo "JF_PUBLIC_HOST / JF_PUBLIC_URL (IAP / browser): ${JF_PUBLIC_HOST} → ${JF_PUBLIC_URL}"
+          echo "JF_REGISTRY_HOST / JF_URL (jf + Docker): ${JF_REGISTRY_HOST} → ${JF_URL}"
+          echo "Repository variables: JF_HOST='${{ vars.JF_HOST }}' JF_HOST_CLI='${{ vars.JF_HOST_CLI }}' (if empty, add JF_HOST_CLI under Settings → Actions → Variables)"
           if [ -n "${IAP_GOOGLE_JWT:-}" ]; then
             echo "--- IAP: ping on JF_PUBLIC_URL (Google ID token only) ---"
             code=$(curl -sS -o /dev/null -w "%{http_code}" \
@@ -117,10 +119,14 @@ jobs:
               "${JF_PUBLIC_URL}artifactory/api/system/ping" || echo "000")
             echo "ping HTTP ${code} (expect 2xx when IAP allows this SA)"
             if [ "${JF_HAVE_CLI_HOST}" != "true" ]; then
-              echo "::error::Platform access tokens must use Authorization: Bearer (JFrog), which IAP cannot combine with a Google JWT on the same host. Set repository variable JF_HOST_CLI to a hostname for the same Artifactory that is not behind IAP (internal LB, split DNS, etc.). JF_URL then points there for jf; JF_PUBLIC_URL stays on vars.JF_HOST for IAP checks. See docs/github-actions-jfrog-iap.md"
+              echo "::error::Add repository variable JF_HOST_CLI (hostname only, different from JF_HOST) pointing at the same Artifactory without IAP in front of Bearer JFrog tokens. GitHub: Settings → Secrets and variables → Actions → Variables. Platform tokens use Authorization: Bearer; IAP on the same host cannot be combined. See docs/github-actions-jfrog-iap.md"
               exit 1
             fi
-            echo "--- Repositories: jf (Bearer JFrog only) on JF_URL — requires JF_HOST_CLI when IAP protects JF_HOST ---"
+            if [ "${JF_REGISTRY_HOST}" = "${JF_PUBLIC_HOST}" ]; then
+              echo "::error::JF_HOST_CLI must not equal JF_HOST (both are '${JF_REGISTRY_HOST}'). Use a second DNS name / backend for the same Artifactory that does not enforce IAP on Authorization."
+              exit 1
+            fi
+            echo "--- Repositories: jf (Bearer JFrog only) on JF_URL — JF_HOST_CLI differs from JF_HOST ---"
             jf rt ping
             if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
               echo "::error::Could not list repositories — check JF_HOST_CLI, token scope, or Project access."

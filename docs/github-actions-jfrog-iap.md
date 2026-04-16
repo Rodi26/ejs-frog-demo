@@ -43,7 +43,7 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 
 **Why `X-JFrog-Art-Api` is not enough:** JFrog **Platform access tokens** are normally sent as **`Authorization: Bearer <token>`**. Putting the same token in **`X-JFrog-Art-Api`** (meant for legacy API keys) can produce Artifactory errors such as **`Props Authentication Token not found`** — IAP was satisfied, but Artifactory did not accept that auth style for the REST API.
 
-**This repo’s approach:** set **`vars.JF_HOST_CLI`** to a hostname for the **same** instance where **`jf`** can use **`Authorization: Bearer`** alone (no IAP on that host). The workflow pings **`JF_PUBLIC_URL`** (`vars.JF_HOST`) with **`IAP_GOOGLE_JWT`**, then runs **`jf`** against **`JF_URL`** (`https://<JF_HOST_CLI>/` when set).
+**This repo’s approach:** set **`vars.JF_HOST_CLI`** (GitHub: **Settings → Secrets and variables → Actions → Variables**) to a hostname for the **same** instance where **`jf`** can use **`Authorization: Bearer`** alone (no IAP on that host). It **must differ** from **`vars.JF_HOST`**. The workflow pings **`JF_PUBLIC_URL`** (`vars.JF_HOST`) with **`IAP_GOOGLE_JWT`**, then runs **`jf`** against **`JF_URL`** (`https://<JF_HOST_CLI>/` when set).
 
 **Implication:** if only a **single** IAP-protected hostname exists and you cannot add a CI-facing hostname, **`jf`** from GitHub-hosted runners will not match a supported dual-auth pattern; options remain:
 

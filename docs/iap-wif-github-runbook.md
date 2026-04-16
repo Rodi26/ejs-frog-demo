@@ -107,7 +107,7 @@ Le job `gh-ejs-demo` de [.github/workflows/workflow.yml](../.github/workflows/wo
 | `IAP_OAUTH_CLIENT_ID` | `xxx.apps.googleusercontent.com` | Oui |
 | `GCP_PROJECT_ID` | `mon-projet` | Recommandé pour `setup-gcloud` |
 | `JF_HOST` | `artifactory.example.org` | Oui (hostname IAP / navigateur) |
-| `JF_HOST_CLI` | `artifactory-internal.example.org` | Oui si **`JF_HOST`** est derrière IAP et que la CI doit utiliser **`jf`** (voir [github-actions-jfrog-iap.md](github-actions-jfrog-iap.md)) |
+| `JF_HOST_CLI` | `artifactory-internal.example.org` | Oui si **`JF_HOST`** est derrière IAP et que la CI doit utiliser **`jf`** — **différent** de **`JF_HOST`**. À créer sous **Settings → Actions → Variables**. Voir [github-actions-jfrog-iap.md](github-actions-jfrog-iap.md). |
 
 | Secret | Obligatoire si `IAP_USE_WIF=true` |
 |--------|-----------------------------------|
