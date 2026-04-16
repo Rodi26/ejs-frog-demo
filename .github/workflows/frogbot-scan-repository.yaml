@@ -2,8 +2,8 @@ name: "Frogbot Scan Repository"
 on:
   workflow_dispatch:
   schedule:
-    # The repository will be scanned once a day at 00:00 GMT.
-    - cron: "30 8 * * *"
+    # Once a day at 09:00 UTC (avoid same cron as gh-ejs-demo at 08:30 UTC — duplicate schedules look like a "loop").
+    - cron: "0 9 * * *"
 permissions:
   contents: write
   pull-requests: write
