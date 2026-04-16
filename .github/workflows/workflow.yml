@@ -47,11 +47,11 @@ jobs:
           GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          # @ in the SA email must be %40 in the path or curl rejects the URL (exit 3).
-          SA_ENC="${GCP_WIF_SERVICE_ACCOUNT//@/%40}"
+          # Build URL in Python: trim secret newlines, percent-encode the SA email, and use %3A before
+          # generateIdToken so curl 8 does not treat ":" as malformed in the path.
+          URL="$(python3 -c "import os,urllib.parse; sa=os.environ['GCP_WIF_SERVICE_ACCOUNT'].strip(); e=urllib.parse.quote(sa, safe=''); print('https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/' + e + '%3AgenerateIdToken')")"
           ACCESS_TOKEN="$(gcloud auth print-access-token)"
-          TOKEN="$(curl -sS -X POST \
-            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${SA_ENC}:generateIdToken" \
+          TOKEN="$(curl -sS -X POST "${URL}" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"audience\": \"${IAP_OAUTH_CLIENT_ID}\", \"includeEmail\": true}" \
