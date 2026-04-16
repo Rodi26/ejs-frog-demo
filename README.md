@@ -7,7 +7,7 @@ This a demo Express JS application to illustrate how a critical vulnerability ca
 
 ## GitHub Actions and JFrog (IAP)
 
-Workflows expect **`vars.JF_HOST`** (hostname, no scheme) and **`secrets.JF_ACCESS_TOKEN`** for the JFrog Platform. If the instance sits behind **Google Cloud IAP**, jobs on GitHub-hosted runners may still fail until the network path allows API access; see [docs/github-actions-jfrog-iap.md](docs/github-actions-jfrog-iap.md), the playbook [docs/playbook-iap-github-actions.md](docs/playbook-iap-github-actions.md), and [docs/iap-programmatic-auth-github-actions.md](docs/iap-programmatic-auth-github-actions.md) for programmatic IAP (OAuth audience + service account / WIF).
+Workflows expect **`vars.JF_HOST`** (hostname, no scheme) and **`secrets.JF_ACCESS_TOKEN`** for the JFrog Platform. For **IAP** with **Workload Identity Federation**, set **`vars.IAP_USE_WIF`** to `true` and configure secrets/vars per [docs/iap-wif-github-runbook.md](docs/iap-wif-github-runbook.md). Also see [docs/github-actions-jfrog-iap.md](docs/github-actions-jfrog-iap.md), [docs/playbook-iap-github-actions.md](docs/playbook-iap-github-actions.md), and [docs/iap-programmatic-auth-github-actions.md](docs/iap-programmatic-auth-github-actions.md).
 
 
    <img src="https://github.com/muldos/vuln-express/raw/master/images/home.png" alt="Home page overview" width="100%" style="margin: 20px;"/>

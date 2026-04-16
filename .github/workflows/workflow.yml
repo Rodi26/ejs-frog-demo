@@ -23,8 +23,28 @@ jobs:
     outputs:
       image:  ${{ vars.JF_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
       digest: ${{ steps.build.outputs.digest }}
-    # Here we install all the tools : docker buildx, QEMU, JDK 11, JFrog CLI
     steps:
+      - name: Checkout the repository    
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud (WIF)
+        id: gcp-auth
+        if: vars.IAP_USE_WIF == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+      - name: Set up gcloud CLI
+        if: vars.IAP_USE_WIF == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - name: Issue Google ID token for IAP audience
+        if: vars.IAP_USE_WIF == 'true'
+        run: |
+          set -euo pipefail
+          TOKEN=$(gcloud auth print-identity-token --audiences="${{ vars.IAP_OAUTH_CLIENT_ID }}")
+          echo "::add-mask::$TOKEN"
+          echo "IAP_ID_TOKEN=$TOKEN" >> "$GITHUB_ENV"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       -
@@ -40,18 +60,25 @@ jobs:
           JF_URL: https://${{ vars.JF_HOST }}/
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
-      - name: Checkout the repository    
-        uses: actions/checkout@v4
       - name: Verify JFrog connection and visible repositories
         run: |
           set -euo pipefail
           echo "JF_URL (from job env — compare with the browser bar for your Artifactory): ${JF_URL}"
-          echo "If ping fails with 'Invalid IAP credentials', IAP is blocking before JFrog — see docs/github-actions-jfrog-iap.md"
-          echo "--- jf rt ping ---"
+          if [ -n "${IAP_ID_TOKEN:-}" ]; then
+            echo "--- IAP layer: curl with Google ID token only ---"
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer ${IAP_ID_TOKEN}" \
+              "${JF_URL}artifactory/api/system/ping" || echo "000")
+            echo "HTTP ${code} (expect not 401 IAP if IAP+token are correct)"
+          else
+            echo "IAP WIF disabled (set vars.IAP_USE_WIF=true after Phase 2). See docs/iap-wif-github-runbook.md"
+          fi
+          echo "If jf fails with 'Invalid IAP credentials', IAP blocks before JFrog — see docs/github-actions-jfrog-iap.md"
+          echo "--- jf rt ping (JF_ACCESS_TOKEN) ---"
           jf rt ping
           echo "--- Repositories this token can see (npm-related keys) ---"
           if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
-            echo "::error::Could not call Artifactory API — wrong JF_URL, network, or token."
+            echo "::error::Could not call Artifactory API — wrong JF_URL, network, token, or IAP still blocking jf."
             exit 1
           fi
           ruby -rjson -e 'raw=File.read("repos.json"); j=JSON.parse(raw); k=j.map{|r| r["key"]}; puts k.grep(/npm/i).sort; puts "---"; ok=k.include?("dev-npm"); puts "Contains dev-npm: #{ok}"; warn "::warning::API list has no dev-npm — check vars.JF_HOST matches this instance, token scope, and Project access." unless ok'

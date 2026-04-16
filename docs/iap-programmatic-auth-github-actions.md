@@ -4,6 +4,8 @@ Ce document décrit **une méthode** pour obtenir un jeton **accepté par Google
 
 Les détails exacts (rôles IAM, noms de ressources) dépendent de votre projet GCP — ce guide reste **méthodologique** et renvoie à la doc Google pour les commandes officielles.
 
+**Runbook opérationnel (commandes gcloud, WIF, multi-repo, workflow `gh-ejs-demo`) :** [iap-wif-github-runbook.md](iap-wif-github-runbook.md).
+
 ---
 
 ## 0. Ce que vous allez obtenir
