@@ -30,7 +30,7 @@ This repo cannot “fix” IAP through YAML alone; it documents the constraint s
 
 `vars.JF_HOST` must be the **same host** you use in the browser to open Artifactory (hostname only, e.g. `artifactory.example.org`). The workflow builds `JF_URL` as `https://<JF_HOST>/`.
 
-If the CLI is pointed at **another** instance (typo, old variable, or duplicate deployment), the API will not list `dev-npm` even though it exists elsewhere. The **Verify JFrog connection** step in [`workflow.yml`](../.github/workflows/workflow.yml) runs `jf rt ping` and lists **npm-related repository keys** visible to **`JF_ACCESS_TOKEN`**. If `dev-npm` is missing from that list, fix **URL**, **token scope**, or **Project / permission** assignment before changing `--repo-resolve` names.
+If the CLI is pointed at **another** instance (typo, old variable, or duplicate deployment), the API will not list `dev-npm` even though it exists elsewhere. The **Verify JFrog connection** step in [`workflow.yml`](../.github/workflows/workflow.yml) checks connectivity and lists **npm-related repository keys** visible to **`JF_ACCESS_TOKEN`** (via `jf` when IAP WIF is off, or via `curl` with IAP JWT + `X-JFrog-Art-Api` when **`IAP_GOOGLE_JWT`** is set). If `dev-npm` is missing from that list, fix **URL**, **token scope**, or **Project / permission** assignment before changing `--repo-resolve` names.
 
 ## `401 Unauthorized` — `Invalid IAP credentials: JWT signature is invalid`
 
@@ -41,7 +41,9 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 
 `JF_ACCESS_TOKEN` is a **JFrog Platform** token. IAP does **not** accept it as an IAP JWT, so `jf rt ping` can return **401** with **Invalid IAP credentials: JWT signature is invalid** even though the same JFrog token would work **if** the HTTP request reached Artifactory (for example after interactive login in a browser, or from a network path that bypasses IAP).
 
-**Implication:** this cannot be fixed by editing this repository’s YAML only. Someone with **GCP / networking** responsibility must change architecture or policy, for example:
+**Verify step (this repo):** when **`IAP_GOOGLE_JWT`** is set, the workflow **does not** call `jf rt ping` against the IAP hostname. It uses **`curl`** with **`Authorization: Bearer <Google IAP JWT>`** (so IAP accepts the request) and **`X-JFrog-Art-Api: <JF_ACCESS_TOKEN>`** so Artifactory can authenticate the Platform token in a **second** header. The JFrog CLI still sends **`Authorization: Bearer <JFrog token>`** only, so **`jf`** steps that hit the same IAP URL can **continue to fail** until CI uses a hostname or path **without** IAP, or your platform exposes another integration pattern.
+
+**Implication:** end-to-end **`jf`** against an IAP-only public URL often still needs an **infrastructure** choice, for example:
 
 - a hostname or path for **API / CI** that is **not** behind IAP (subject to security review), or  
 - **Self-hosted GitHub runners** (or VPN) so CI traffic does not hit public IAP like a random Internet client, or  
@@ -49,7 +51,7 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 
 **Step-by-step (GitHub Actions + audience OAuth + SA / WIF) :** [iap-programmatic-auth-github-actions.md](iap-programmatic-auth-github-actions.md).
 
-Until traffic from GitHub-hosted runners can satisfy IAP (or bypass it for that endpoint), **`jf`** will keep failing **before** JFrog evaluates `JF_ACCESS_TOKEN`.
+For **`jf`** itself (not raw `curl`), traffic must still reach Artifactory in a way compatible with how the CLI sends **`Authorization`** — otherwise steps after **Verify** (npm, Docker, build info, etc.) can fail even when **Verify** passes.
 
 ## References
 

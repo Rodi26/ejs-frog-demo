@@ -15,6 +15,17 @@ variable "pool_id" {
   default     = "github-actions-pool"
 }
 
+variable "pool_display_name" {
+  type        = string
+  description = "Human-readable pool name in GCP console. Max 32 characters (API limit)."
+  default     = "GitHub Actions WIF"
+
+  validation {
+    condition     = length(var.pool_display_name) <= 32
+    error_message = "pool_display_name must be <= 32 characters (GCP WorkloadIdentityPool limit)."
+  }
+}
+
 variable "provider_id" {
   type        = string
   description = "OIDC provider ID inside the pool (GitHub)."

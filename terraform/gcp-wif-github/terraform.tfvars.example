@@ -8,7 +8,8 @@ github_org   = "Rodi26"
 # restrict_to_single_repo = true
 # github_repo_full        = "Rodi26/ejs-frog-demo"
 
-pool_id     = "github-actions-pool"
+pool_id            = "github-actions-pool"
+# pool_display_name = "GitHub Actions WIF"  # optional; max 32 chars (GCP API)
 provider_id = "github-provider"
 
 service_account_id = "github-ci-iap"

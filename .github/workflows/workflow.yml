@@ -99,25 +99,40 @@ jobs:
       # header — the LB often rejects it with "JWT signature is invalid" before Artifactory runs.
       # Use curl+IAP_GOOGLE_JWT to test IAP; jf may need a non-IAP hostname or platform change.
       - name: Verify JFrog connection and visible repositories
+        env:
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
           echo "JF_URL (from job env — compare with the browser bar for your Artifactory): ${JF_URL}"
           if [ -n "${IAP_GOOGLE_JWT:-}" ]; then
-            echo "--- IAP layer: curl with Google ID token only ---"
+            echo "--- IAP: ping (Google ID token only; IAP validates this header) ---"
             code=$(curl -sS -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${IAP_GOOGLE_JWT}" \
               "${JF_URL}artifactory/api/system/ping" || echo "000")
-            echo "HTTP ${code} (401=bad/missing IAP token; 403=often missing IAP role for this SA on the backend; 2xx=IAP allows the call)"
+            echo "ping HTTP ${code} (expect 2xx when IAP allows this SA)"
+            echo "--- Repositories: curl with Bearer=IAP JWT + X-JFrog-Art-Api=JFrog token (jf uses Bearer for JFrog only — conflicts with IAP; see docs/github-actions-jfrog-iap.md) ---"
+            http_code=$(curl -sS -o repos.json -w "%{http_code}" \
+              -H "Authorization: Bearer ${IAP_GOOGLE_JWT}" \
+              -H "X-JFrog-Art-Api: ${JF_ACCESS_TOKEN}" \
+              "${JF_URL}artifactory/api/repositories")
+            echo "repositories HTTP ${http_code}"
+            case "${http_code}" in
+              2??) ;;
+              *)
+                echo "::error::Could not list repositories (IAP + JFrog headers). Body (truncated):"
+                head -c 2000 repos.json || true
+                exit 1
+                ;;
+            esac
           else
             echo "IAP WIF disabled (set vars.IAP_USE_WIF=true after Phase 2). See docs/iap-wif-github-runbook.md"
-          fi
-          echo "If jf fails with 'Invalid IAP credentials', IAP is validating the JFrog Bearer token as a Google JWT — see docs/github-actions-jfrog-iap.md"
-          echo "--- jf rt ping (JF_ACCESS_TOKEN) ---"
-          jf rt ping
-          echo "--- Repositories this token can see (npm-related keys) ---"
-          if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
-            echo "::error::Could not call Artifactory API — wrong JF_URL, network, token, or IAP still blocking jf."
-            exit 1
+            echo "--- jf rt ping (JF_ACCESS_TOKEN) ---"
+            jf rt ping
+            echo "--- Repositories this token can see (npm-related keys) ---"
+            if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
+              echo "::error::Could not call Artifactory API — wrong JF_URL, network, token, or IAP still blocking jf."
+              exit 1
+            fi
           fi
           ruby -rjson -e 'raw=File.read("repos.json"); j=JSON.parse(raw); k=j.map{|r| r["key"]}; puts k.grep(/npm/i).sort; puts "---"; ok=k.include?("dev-npm"); puts "Contains dev-npm: #{ok}"; warn "::warning::API list has no dev-npm — check vars.JF_HOST matches this instance, token scope, and Project access." unless ok'
       - name: NPM Audit 
