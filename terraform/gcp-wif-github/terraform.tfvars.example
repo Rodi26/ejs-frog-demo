@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (do not commit secrets — only IDs).
+# terraform apply -var-file=terraform.tfvars
+
+project_id   = "my-gcp-project"
+github_org   = "Rodi26"
+
+# Optional: lock to one repo only
+# restrict_to_single_repo = true
+# github_repo_full        = "Rodi26/ejs-frog-demo"
+
+pool_id     = "github-actions-pool"
+provider_id = "github-provider"
+
+service_account_id = "github-ci-iap"

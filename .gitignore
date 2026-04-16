@@ -2,3 +2,9 @@ node_modules
 .jfrog
 package-lock.json
 .vscode
+
+# Terraform (local state / vars — keep examples only in git)
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.*
+terraform/**/terraform.tfvars

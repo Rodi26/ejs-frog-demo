@@ -63,7 +63,9 @@ Objectif : un `curl` vers l’URL Artifactory avec **uniquement** le jeton IAP r
 
 Objectif : GitHub Actions obtient les mêmes capacités que le test local, **sans** stocker une clé JSON dans le dépôt.
 
-**Script d’amorçage** : [`scripts/iap-wif-bootstrap.sh`](../scripts/iap-wif-bootstrap.sh) (variables `PROJECT_ID`, `POOL_ID`, `PROVIDER_ID`, `GITHUB_ORG`, `SA_ID` ; optionnel `GITHUB_REPO`, `DRY_RUN=1`). Pour un **deuxième dépôt** avec binding par repo, voir [`scripts/iap-wif-add-repo.sh`](../scripts/iap-wif-add-repo.sh).
+**Méthode recommandée (IaC)** : module Terraform [`terraform/gcp-wif-github/`](../terraform/gcp-wif-github/README.md) — `terraform init` / `plan` / `apply`, puis copier les **outputs** (`workload_identity_provider`, `service_account_email`) dans les secrets GitHub.
+
+**Alternative shell** : [`scripts/iap-wif-bootstrap.sh`](../scripts/iap-wif-bootstrap.sh) (variables `PROJECT_ID`, `POOL_ID`, `PROVIDER_ID`, `GITHUB_ORG`, `SA_ID` ; optionnel `GITHUB_REPO`, `DRY_RUN=1`). Pour un **deuxième dépôt** avec binding par repo, voir [`scripts/iap-wif-add-repo.sh`](../scripts/iap-wif-add-repo.sh).
 
 Les détails et variantes restent dans la doc officielle [Configurer le déploiement depuis GitHub](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) (pool, provider OIDC GitHub, liaison du **SA** avec `roles/iam.workloadIdentityUser`).
 
