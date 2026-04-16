@@ -202,7 +202,28 @@ jobs:
               exit 1
             fi
           fi
-          ruby -rjson -e 'raw=File.read("repos.json"); j=JSON.parse(raw); k=j.map{|r| r["key"]}; puts k.grep(/npm/i).sort; puts "---"; ok=k.include?("dev-npm"); puts "Contains dev-npm: #{ok}"; warn "::warning::API list has no dev-npm — check vars.JF_HOST / JF_HOST_CLI, token scope, and Project access." unless ok'
+          ruby -rjson <<'RUBY'
+          j = JSON.parse(File.read("repos.json"))
+          list =
+            case j
+            when Array then j
+            when Hash
+              j["repositories"] || j["data"] || j.values.find { |v| v.is_a?(Array) } || []
+            else
+              []
+            end
+          k = list.filter_map do |r|
+            case r
+            when Hash then r["key"]
+            when String then r
+            end
+          end
+          puts k.grep(/npm/i).sort
+          puts "---"
+          ok = k.include?("dev-npm")
+          puts "Contains dev-npm: #{ok}"
+          warn "::warning::API list has no dev-npm — check vars.JF_HOST / JF_HOST_CLI, token scope, and Project access." unless ok
+          RUBY
       - name: NPM Audit 
         run: |
           jf rt bce 
