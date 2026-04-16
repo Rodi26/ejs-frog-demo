@@ -106,9 +106,9 @@ Ordre logique des étapes (à adapter) :
 1. **Checkout** (si besoin).
 2. **`google-github-actions/auth`** — connexion à GCP (WIF ou clé).
 3. **Shell** :  
-   `export IAP_ID_TOKEN="$(gcloud auth print-identity-token --audiences="$IAP_OAUTH_CLIENT_ID")"`  
+   `export IAP_GOOGLE_JWT="$(gcloud auth print-identity-token --audiences="$IAP_OAUTH_CLIENT_ID")"` (en CI, le workflow utilise plutôt `generateIdToken` si WIF.)  
    (en passant le client ID par `vars` / `secrets`.)
-4. **Requêtes vers l’URL IAP** : pour les outils qui acceptent un en-tête personnalisé, envoyer **`Authorization: Bearer $IAP_ID_TOKEN`** pour franchir IAP.
+4. **Requêtes vers l’URL IAP** : pour les outils qui acceptent un en-tête personnalisé, envoyer **`Authorization: Bearer $IAP_GOOGLE_JWT`** pour franchir IAP.
 5. **JFrog** : selon votre installation, configurer ensuite **`JF_ACCESS_TOKEN`** / `jf` pour parler à Artifactory **une fois** IAP passé (souvent via proxy interne, double auth, ou chemin réseau — **à valider avec l’équipe qui a posé IAP devant Artifactory**).
 
 Important : le CLI **`jf`** envoie typiquement **`Authorization: Bearer` + jeton JFrog**. Si IAP exige **son** Bearer en premier, il peut y avoir **conflit** sur un seul en-tête : solutions possibles = **proxy** qui termine IAP, **hostname** sans IAP pour l’API CI, ou **split** des responsabilités réseau — ce n’est pas résolvable uniquement par un secret JFrog.

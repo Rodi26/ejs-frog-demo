@@ -98,8 +98,8 @@ Variables GitHub (org ou repo) :
 
 Le job `gh-ejs-demo` de [.github/workflows/workflow.yml](../.github/workflows/workflow.yml) :
 
-- Si **`vars.IAP_USE_WIF`** vaut `true` : authentification WIF, `gcloud`, `gcloud auth print-identity-token --audiences=...`, variable d’environnement **`IAP_ID_TOKEN`**.
-- Étape de vérification : si `IAP_ID_TOKEN` est défini, un **`curl`** vers `/artifactory/api/system/ping` avec ce jeton ; puis **`jf rt ping`** avec `JF_ACCESS_TOKEN` comme aujourd’hui.
+- Si **`vars.IAP_USE_WIF`** vaut `true` : authentification WIF, jeton IAP via l’API IAM Credentials (`generateIdToken`), variable d’environnement **`IAP_GOOGLE_JWT`** (nom sans `token` pour éviter que `JFROG_CLI_ENV_EXCLUDE=*token*` ne vide la variable).
+- Étape de vérification : si `IAP_GOOGLE_JWT` est défini, un **`curl`** vers `/artifactory/api/system/ping` avec ce jeton ; puis **`jf rt ping`** avec `JF_ACCESS_TOKEN` comme aujourd’hui.
 
 | Variable | Exemple | Obligatoire si `IAP_USE_WIF=true` |
 |----------|---------|-----------------------------------|

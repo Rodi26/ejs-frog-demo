@@ -40,6 +40,8 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
       # WIF credentials are not a "classic" SA key; gcloud print-identity-token --audiences
       # rejects them ("Invalid account type"). Mint the IAP ID token via IAM Credentials API instead.
+      # Name must NOT contain "token": jfrog/setup-jfrog-cli sets JFROG_CLI_ENV_EXCLUDE=*token* and
+      # would strip IAP_ID_TOKEN from the job environment.
       - name: Issue Google ID token for IAP audience
         if: vars.IAP_USE_WIF == 'true'
         env:
@@ -47,18 +49,37 @@ jobs:
           GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
-          # Build URL in Python: trim secret newlines, percent-encode the SA email, and use %3A before
-          # generateIdToken so curl 8 does not treat ":" as malformed in the path.
-          URL="$(python3 -c "import os,urllib.parse; sa=os.environ['GCP_WIF_SERVICE_ACCOUNT'].strip(); e=urllib.parse.quote(sa, safe=''); print('https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/' + e + '%3AgenerateIdToken')")"
-          ACCESS_TOKEN="$(gcloud auth print-access-token)"
-          TOKEN="$(curl -sS -X POST "${URL}" \
-            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"audience\": \"${IAP_OAUTH_CLIENT_ID}\", \"includeEmail\": true}" \
-            | jq -r '.token')"
-          test -n "${TOKEN}" && test "${TOKEN}" != "null"
-          echo "::add-mask::$TOKEN"
-          echo "IAP_ID_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          python3 <<'PY'
+          import json, os, subprocess, urllib.error, urllib.request
+          from urllib.parse import quote
+
+          sa = os.environ["GCP_WIF_SERVICE_ACCOUNT"].strip()
+          aud = os.environ["IAP_OAUTH_CLIENT_ID"].strip()
+          access = subprocess.check_output(
+              ["gcloud", "auth", "print-access-token"], text=True
+          ).strip()
+          # Literal ":generateIdToken" in path; only encode the SA email (curl URL parsing was brittle).
+          url = (
+              "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
+              + quote(sa, safe="")
+              + ":generateIdToken"
+          )
+          body = json.dumps({"audience": aud, "includeEmail": True}).encode()
+          req = urllib.request.Request(url, data=body, method="POST")
+          req.add_header("Authorization", f"Bearer {access}")
+          req.add_header("Content-Type", "application/json")
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  out = json.load(resp)
+          except urllib.error.HTTPError as e:
+              raise SystemExit(f"generateIdToken failed HTTP {e.code}: {e.read().decode()}")
+          jwt = out.get("token")
+          if not jwt:
+              raise SystemExit(f"no token in response: {out}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as gh:
+              gh.write(f"IAP_GOOGLE_JWT={jwt}\n")
+          print("::add-mask::" + jwt)
+          PY
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       -
@@ -78,10 +99,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "JF_URL (from job env — compare with the browser bar for your Artifactory): ${JF_URL}"
-          if [ -n "${IAP_ID_TOKEN:-}" ]; then
+          if [ -n "${IAP_GOOGLE_JWT:-}" ]; then
             echo "--- IAP layer: curl with Google ID token only ---"
             code=$(curl -sS -o /dev/null -w "%{http_code}" \
-              -H "Authorization: Bearer ${IAP_ID_TOKEN}" \
+              -H "Authorization: Bearer ${IAP_GOOGLE_JWT}" \
               "${JF_URL}artifactory/api/system/ping" || echo "000")
             echo "HTTP ${code} (expect not 401 IAP if IAP+token are correct)"
           else
