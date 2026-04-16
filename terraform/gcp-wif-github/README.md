@@ -5,7 +5,8 @@ Provisionne dans **un projet GCP** :
 - APIs : IAM, IAM Credentials, STS  
 - **Workload Identity Pool** + **OIDC provider** `https://token.actions.githubusercontent.com`  
 - **Compte de service** CI  
-- Binding `roles/iam.workloadIdentityUser` pour les identités fédérées GitHub (soumis à la **attribute condition**)
+- Binding `roles/iam.workloadIdentityUser` pour les identités fédérées GitHub (soumis à la **attribute condition**)  
+- Binding `roles/iam.serviceAccountTokenCreator` du **même** compte de service sur lui-même (nécessaire pour `iamcredentials.googleapis.com` → `generateIdToken` / audience IAP)
 
 ## Prérequis
 
@@ -47,4 +48,5 @@ Documentation dépôt : [docs/iap-wif-github-runbook.md](../../docs/iap-wif-gith
 | `github_org` | Organisation (ou user) GitHub pour `assertion.repository_owner`. |
 | `restrict_to_single_repo` | Si `true`, utiliser `github_repo_full` au lieu du filtre org seul. |
 | `pool_id` / `provider_id` | IDs du pool et du provider OIDC. |
+| `pool_display_name` | Nom affiché du pool (**≤ 32 caractères**, limite API GCP). |
 | `service_account_id` | ID court du compte de service. |

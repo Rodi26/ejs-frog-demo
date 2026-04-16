@@ -30,7 +30,7 @@ resource "google_project_service" "required_apis" {
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project_id
   workload_identity_pool_id = var.pool_id
-  display_name              = "GitHub Actions (${var.pool_id})"
+  display_name              = var.pool_display_name
   description               = "OIDC federation for GitHub Actions (IAP + CI)."
   disabled                  = false
 
@@ -70,4 +70,12 @@ resource "google_service_account_iam_member" "wif_impersonate" {
   service_account_id = google_service_account.github_ci.name
   role               = "roles/iam.workloadIdentityUser"
   member             = local.wif_principal_set
+}
+
+# Required for IAM Credentials API generateIdToken (IAP OIDC audience) when acting as this SA.
+# Without it: Permission iam.serviceAccounts.getOpenIdToken denied.
+resource "google_service_account_iam_member" "github_ci_openid_token_self" {
+  service_account_id = google_service_account.github_ci.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.github_ci.email}"
 }
