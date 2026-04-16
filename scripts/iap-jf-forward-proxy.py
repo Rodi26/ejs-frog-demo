@@ -28,6 +28,23 @@ if not UPSTREAM or not IAP_JWT:
     print("iap-jf-forward-proxy: need JF_UPSTREAM_HOST and IAP_GOOGLE_JWT", file=sys.stderr)
     sys.exit(1)
 
+# Origin clients use to talk to this listener (Docker push/pull via insecure registry).
+_LOCAL_HTTP_ORIGIN = f"http://{BIND}"
+
+
+def _rewrite_www_authenticate(value: str) -> str:
+    """
+    Docker registry clients follow OAuth token URLs from WWW-Authenticate (realm=...).
+    Upstream Artifactory returns an HTTPS realm on the public IAP hostname; fetching that
+    URL directly bypasses this forwarder and IAP returns HTML → 'invalid character <' in JSON.
+    Rewrite realm URLs so token requests stay on http://127.0.0.1:<port>/... and pass through us.
+    """
+    # Replace longer match first so :443 is not left behind as a bogus suffix.
+    v = value.replace(f"https://{UPSTREAM}:443", _LOCAL_HTTP_ORIGIN)
+    v = v.replace(f"https://{UPSTREAM}", _LOCAL_HTTP_ORIGIN)
+    v = v.replace(f"http://{UPSTREAM}", _LOCAL_HTTP_ORIGIN)
+    return v
+
 
 def _hop_by_hop() -> set[str]:
     return {
@@ -75,6 +92,8 @@ class ForwardHandler(BaseHTTPRequestHandler):
             for hk, hv in resp.getheaders():
                 if hk.lower() in _hop_by_hop():
                     continue
+                if hk.lower() == "www-authenticate":
+                    hv = _rewrite_www_authenticate(hv)
                 self.send_header(hk, hv)
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
