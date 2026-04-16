@@ -32,6 +32,7 @@ if not UPSTREAM or not IAP_JWT:
 def _hop_by_hop() -> set[str]:
     return {
         "connection",
+        "content-length",
         "keep-alive",
         "proxy-authenticate",
         "proxy-authorization",
@@ -66,17 +67,19 @@ class ForwardHandler(BaseHTTPRequestHandler):
         try:
             conn.request(self.command, self.path, body=body, headers=out_headers)
             resp = conn.getresponse()
+            # Read full body so we can send a single Content-Length. Streaming without
+            # Content-Length after stripping Transfer-Encoding confuses some clients and
+            # can truncate or corrupt binary bodies (npm tar TAR_ENTRY_INVALID).
+            payload = resp.read()
             self.send_response(resp.status)
             for hk, hv in resp.getheaders():
                 if hk.lower() in _hop_by_hop():
                     continue
                 self.send_header(hk, hv)
+            self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
-            while True:
-                chunk = resp.read(65536)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
+            if payload:
+                self.wfile.write(payload)
         finally:
             conn.close()
 

@@ -238,6 +238,25 @@ jobs:
           jf npmc --repo-resolve dev-npm
           jf ca
           jf npmc --repo-resolve dev-npm-unsecure-remote
+          # npm ci follows package-lock "resolved" URLs verbatim. If they point at the IAP
+          # hostname, npm would fetch without Proxy-Authorization → HTML/error bytes → tar corruption.
+          if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
+            echo "Rewriting package-lock.json resolved URLs to local IAP forward proxy (${JF_REGISTRY_HOST})."
+            ruby -e '
+              lock = File.read("package-lock.json", encoding: "UTF-8")
+              pub = ENV.fetch("JF_PUBLIC_HOST").strip
+              reg = ENV.fetch("JF_REGISTRY_HOST").strip
+              old = "https://" + pub
+              new = "http://" + reg
+              n = lock.split(old).size - 1
+              if n == 0
+                warn "::warning::No #{old} in package-lock.json — tarball fetches may still bypass the proxy."
+              else
+                File.write("package-lock.json", lock.gsub(old, new), encoding: "UTF-8")
+                puts "Rewrote #{n} URL prefix(es): #{old} → #{new}"
+              end
+            '
+          fi
           jf npm ci --omit dev
           jf audit --npm --fail=false
       
