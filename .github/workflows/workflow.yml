@@ -47,9 +47,11 @@ jobs:
           GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
+          # @ in the SA email must be %40 in the path or curl rejects the URL (exit 3).
+          SA_ENC="${GCP_WIF_SERVICE_ACCOUNT//@/%40}"
           ACCESS_TOKEN="$(gcloud auth print-access-token)"
           TOKEN="$(curl -sS -X POST \
-            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${GCP_WIF_SERVICE_ACCOUNT}:generateIdToken" \
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${SA_ENC}:generateIdToken" \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"audience\": \"${IAP_OAUTH_CLIENT_ID}\", \"includeEmail\": true}" \
