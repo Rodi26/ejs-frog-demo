@@ -31,7 +31,11 @@ Copier les **outputs** vers les secrets / variables GitHub du dépôt :
 |------------------|----------------|
 | `workload_identity_provider` | Secret `WORKLOAD_IDENTITY_PROVIDER` |
 | `service_account_email` | Secret `GCP_WIF_SERVICE_ACCOUNT` |
-| (voir hint) | Vars `IAP_USE_WIF`, `GCP_PROJECT_ID`, `IAP_OAUTH_CLIENT_ID` |
+| (voir `github_actions_vars_hint`) | Rappel des noms de variables ; pour les **créer automatiquement**, voir le module voisin |
+
+### Variables GitHub Actions (automatisation)
+
+Le module **[`../github-actions-variables/`](../github-actions-variables/)** provisionne les **variables** du dépôt (`JF_HOST`, `JF_PROJECT_KEY`, `IAP_USE_WIF`, `GCP_PROJECT_ID`, `IAP_OAUTH_CLIENT_ID`, optionnellement `JF_HOST_CLI`, `JF_DOCKER_USERNAME`) via le provider `integrations/github`. À exécuter dans un second répertoire avec un PAT — les **secrets** GitHub restent à saisir à la main (ou Terraform séparé).
 
 Documentation dépôt : [docs/iap-wif-github-runbook.md](../../docs/iap-wif-github-runbook.md).
 

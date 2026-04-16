@@ -1,0 +1,23 @@
+# Copy to terraform.tfvars (do not commit secrets).
+# Prefer: export TF_VAR_github_token=ghp_...
+#
+# terraform -chdir=terraform/github-actions-variables init
+# terraform -chdir=terraform/github-actions-variables plan
+# terraform -chdir=terraform/github-actions-variables apply
+
+github_owner      = "Rodi26"
+github_repository = "ejs-frog-demo"
+
+gcp_project_id       = "my-gcp-project"
+jf_host              = "artifactory.example.org"
+jf_project_key       = "demo-1"
+iap_oauth_client_id  = "123456789-xxx.apps.googleusercontent.com"
+
+# Optional — align with workflows defaults
+# iap_use_wif = "true"
+
+# Optional — only if using split hostname for CLI (no IAP on this host)
+# jf_host_cli = "artifactory-internal.example.org"
+
+# Optional — Docker Basic auth username when using IAP proxy mode
+# jf_docker_username = "admin"

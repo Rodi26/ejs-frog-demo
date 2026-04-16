@@ -73,6 +73,10 @@ Other org-level options still apply: **self-hosted runners**, **VPC / allowliste
 
 For **`jf`** and Docker, traffic must reach Artifactory in a way compatible with how those clients send **`Authorization`** — the forward proxy adds **`Proxy-Authorization`** only on the hop from the runner to **`https://<JF_HOST>`**.
 
+## Terraform (variables dépôt)
+
+Pour créer les **`vars.*`** GitHub Actions à partir de fichiers versionnés, ce dépôt fournit **[`terraform/github-actions-variables/`](../terraform/github-actions-variables/)** (provider `integrations/github`). Le module GCP WIF **[`terraform/gcp-wif-github/`](../terraform/gcp-wif-github/)** continue de provisionner uniquement l’identité et les outputs pour les **secrets** ; les secrets eux-mêmes ne sont pas dans ce Terraform par défaut.
+
 ## References
 
 - [Google Cloud — Authenticate to IAP](https://cloud.google.com/iap/docs/authentication-howto)

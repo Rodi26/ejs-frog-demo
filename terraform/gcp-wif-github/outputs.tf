@@ -14,10 +14,14 @@ output "workload_identity_provider" {
 }
 
 output "github_actions_vars_hint" {
-  description = "Suggested repository variables after apply."
+  description = "Suggested repository variables (create manually or use terraform/github-actions-variables/)."
   value       = <<-EOT
     IAP_USE_WIF=true
     GCP_PROJECT_ID=${var.project_id}
+    JF_HOST=<Artifactory hostname only, e.g. artifactory.example.org>
+    JF_PROJECT_KEY=<JFrog Platform project key>
     IAP_OAUTH_CLIENT_ID=<OAuth 2.0 Client ID from IAP / APIs Credentials — *.apps.googleusercontent.com>
+    (optional) JF_HOST_CLI=<second hostname for jf when IAP blocks Bearer-only>
+    (optional) JF_DOCKER_USERNAME=<Artifactory user for Docker Basic auth via proxy>
   EOT
 }
