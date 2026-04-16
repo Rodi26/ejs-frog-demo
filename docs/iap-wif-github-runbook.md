@@ -20,6 +20,8 @@ Références Google : [Programmatic authentication (IAP)](https://cloud.google.c
 
 Objectif : un `curl` vers l’URL Artifactory avec **uniquement** le jeton IAP retourne autre chose qu’un **401 `Invalid IAP credentials`**.
 
+**Script automatisé (recommandé)** : après avoir exporté `IAP_OAUTH_CLIENT_ID` et `JF_URL`, exécuter [`scripts/iap-phase1-local-verify.sh`](../scripts/iap-phase1-local-verify.sh) (voir [`scripts/README.md`](../scripts/README.md)).
+
 1. **Projet et compte actifs**
 
    ```bash
@@ -61,7 +63,9 @@ Objectif : un `curl` vers l’URL Artifactory avec **uniquement** le jeton IAP r
 
 Objectif : GitHub Actions obtient les mêmes capacités que le test local, **sans** stocker une clé JSON dans le dépôt.
 
-Les commandes exactes évoluent ; suivez la doc officielle [Configurer le déploiement depuis GitHub](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) (création du **pool**, du **provider OIDC GitHub**, liaison du **SA** avec condition sur `attribute.repository`).
+**Script d’amorçage** : [`scripts/iap-wif-bootstrap.sh`](../scripts/iap-wif-bootstrap.sh) (variables `PROJECT_ID`, `POOL_ID`, `PROVIDER_ID`, `GITHUB_ORG`, `SA_ID` ; optionnel `GITHUB_REPO`, `DRY_RUN=1`). Pour un **deuxième dépôt** avec binding par repo, voir [`scripts/iap-wif-add-repo.sh`](../scripts/iap-wif-add-repo.sh).
+
+Les détails et variantes restent dans la doc officielle [Configurer le déploiement depuis GitHub](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) (pool, provider OIDC GitHub, liaison du **SA** avec `roles/iam.workloadIdentityUser`).
 
 Éléments à noter pour les **secrets GitHub** du dépôt :
 
