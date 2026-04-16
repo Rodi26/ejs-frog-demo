@@ -95,6 +95,9 @@ jobs:
           JF_URL: https://${{ vars.JF_HOST }}/
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+      # IAP validates Authorization as a Google ID token. jf sends JF_ACCESS_TOKEN (JFrog) in the same
+      # header — the LB often rejects it with "JWT signature is invalid" before Artifactory runs.
+      # Use curl+IAP_GOOGLE_JWT to test IAP; jf may need a non-IAP hostname or platform change.
       - name: Verify JFrog connection and visible repositories
         run: |
           set -euo pipefail
@@ -104,11 +107,11 @@ jobs:
             code=$(curl -sS -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${IAP_GOOGLE_JWT}" \
               "${JF_URL}artifactory/api/system/ping" || echo "000")
-            echo "HTTP ${code} (expect not 401 IAP if IAP+token are correct)"
+            echo "HTTP ${code} (401=bad/missing IAP token; 403=often missing IAP role for this SA on the backend; 2xx=IAP allows the call)"
           else
             echo "IAP WIF disabled (set vars.IAP_USE_WIF=true after Phase 2). See docs/iap-wif-github-runbook.md"
           fi
-          echo "If jf fails with 'Invalid IAP credentials', IAP blocks before JFrog — see docs/github-actions-jfrog-iap.md"
+          echo "If jf fails with 'Invalid IAP credentials', IAP is validating the JFrog Bearer token as a Google JWT — see docs/github-actions-jfrog-iap.md"
           echo "--- jf rt ping (JF_ACCESS_TOKEN) ---"
           jf rt ping
           echo "--- Repositories this token can see (npm-related keys) ---"
