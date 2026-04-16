@@ -303,12 +303,18 @@ jobs:
       - name: docker Info
         id: docker-info
         run: |  
-          echo "digest=$(docker images --no-trunc --quiet ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }})" >> $GITHUB_OUTPUT
-          jf docker pull ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
+          # buildx --push does not load the image into the local engine; use the digest from build-push-action.
+          echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+          # Pull by digest so we resolve the same manifest buildx pushed (tag pull + jf docker pull were flaky with IAP proxy / jf login).
+          FULL="${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}"
+          DIG="${{ steps.build.outputs.digest }}"
+          docker pull "${FULL%:*}@${DIG}"
+          docker tag "${FULL%:*}@${DIG}" "${FULL}"
           jf docker scan --fail=false  --threads=5 ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }} --severity='HIGH,CRITICAL' --vuln --format=sarif > jfrog_docker_scan.sarif
           SCHEME=https
           if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then SCHEME=http; fi
-          sed -i s/"\"uri\": \"\""/"\"uri\": \"${SCHEME}:\/\/${{ env.JF_REGISTRY_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}:${{ github.run_number }}\""/g jfrog_docker_scan.sarif
+          # IMAGE_NAME already includes :<run_number> — do not append github.run_number again (would yield ejs-demo:163:163).
+          sed -i s/"\"uri\": \"\""/"\"uri\": \"${SCHEME}:\/\/${{ env.JF_REGISTRY_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}\""/g jfrog_docker_scan.sarif
         # adding the built docker into the JFrog build info     
       - name: Upload output to generate autofix
         uses: github/codeql-action/upload-sarif@v3
