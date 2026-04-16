@@ -1,0 +1,3 @@
+# Host deps from CI "NPM Audit" (jf npm i) are not used by the image — Dockerfile runs npm i inside the container.
+node_modules
+.git

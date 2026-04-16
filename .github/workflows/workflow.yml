@@ -232,15 +232,13 @@ jobs:
         timeout-minutes: 30
         run: |
           set -euo pipefail
-          echo "NPM via JFrog (+ IAP proxy when set): resolving deps can take many minutes; this is not a hang."
+          echo "NPM via JFrog: install uses committed package-lock.json (jf npm ci) — much faster than deleting the lock and jf npm i."
           jf rt bce 
           jf rt bag
           jf npmc --repo-resolve dev-npm
           jf ca
-          jf npm cache clean --force
-          rm package-lock.json
           jf npmc --repo-resolve dev-npm-unsecure-remote
-          jf npm i --omit dev 
+          jf npm ci --omit dev
           jf audit --npm --fail=false
       
       - name: Authenticate Docker
