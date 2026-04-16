@@ -2,9 +2,17 @@
 
 ## Context
 
-The [`gh-ejs-demo`](../.github/workflows/workflow.yml) workflow uses `jfrog/setup-jfrog-cli` with **`JF_URL`** and **`JF_ACCESS_TOKEN`** (`secrets.JF_ACCESS_TOKEN`). **`vars.JF_HOST`** is the public / browser hostname (often behind **IAP**). When IAP is on, set **`vars.JF_HOST_CLI`** to another hostname for the **same** Artifactory that does **not** put IAP in front of `Authorization: Bearer` (internal load balancer, split DNS, etc.): **`JF_URL`** becomes `https://<JF_HOST_CLI>/`, while **`JF_PUBLIC_URL`** stays `https://<JF_HOST>/` for IAP checks. Docker uses **`JF_REGISTRY_HOST`** (same logic as **`JF_URL`**). If **`JF_HOST_CLI`** is unset, **`JF_HOST`** is used for both (works when there is no IAP).
+The [`gh-ejs-demo`](../.github/workflows/workflow.yml) workflow uses `jfrog/setup-jfrog-cli` with **`JF_URL`** and **`JF_ACCESS_TOKEN`** (`secrets.JF_ACCESS_TOKEN`). **`vars.JF_HOST`** is the public / browser hostname (often behind **IAP**). **`JF_PUBLIC_URL`** is `https://<JF_HOST>/` for IAP-related checks.
 
-That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/integrations/docs/example-continuous-integration-between-github-actions-and-artifactory) (Platform access token). It authenticates to **JFrog** once HTTP traffic reaches Artifactory. It does **not** satisfy **Google IAP** in front of the same URL — see the section **`401 Unauthorized` / Invalid IAP credentials** below.
+**Two supported ways to reach Artifactory from the runner when IAP protects the public hostname:**
+
+1. **Proxy-Authorization (preferred when you only have one public URL)** — Google IAP can validate the Google **OIDC ID token** in `Proxy-Authorization: Bearer <Google ID token>` so the client can keep `Authorization: Bearer <JFrog platform token>` for Artifactory. See [Authenticate from Proxy-Authorization Header](https://cloud.google.com/iap/docs/authentication-howto#authenticating_from_proxy-authorization_header). The stock **`jf`** CLI does not send **`Proxy-Authorization`**, so this repo starts a small local forwarder ([`scripts/iap-jf-forward-proxy.py`](../scripts/iap-jf-forward-proxy.py)) when **`vars.IAP_USE_WIF`** is **`true`** and **`vars.JF_HOST_CLI`** is **empty**. The workflow then sets **`JF_URL`** and **`JF_REGISTRY_HOST`** to `http://127.0.0.1:<port>/` (HTTP to the local proxy), configures Docker **`insecure-registries`** for that address, and **`jf docker login` / push** go through the proxy (IAP JWT added upstream; JFrog token unchanged).
+
+2. **Second hostname (`JF_HOST_CLI`)** — Set **`vars.JF_HOST_CLI`** to another hostname for the **same** Artifactory that does **not** put IAP in front of **`Authorization: Bearer`** (internal load balancer, split DNS, etc.). Then **`JF_URL`** is `https://<JF_HOST_CLI>/` and **`JF_REGISTRY_HOST`** matches. Use this if you prefer not to run the local proxy or your platform forbids it.
+
+If **`IAP_USE_WIF`** is false or there is no IAP, **`JF_HOST_CLI`** empty means **`JF_URL`** defaults to **`https://<JF_HOST>/`** (works when IAP is not in the path).
+
+That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/integrations/docs/example-continuous-integration-between-github-actions-and-artifactory) (Platform access token). It authenticates to **JFrog** once HTTP traffic reaches Artifactory.
 
 **There was no IAP documentation in this repository before** the first version of this file; the playbook is [playbook-iap-github-actions.md](playbook-iap-github-actions.md).
 
@@ -30,7 +38,7 @@ This repo cannot “fix” IAP through YAML alone; it documents the constraint s
 
 `vars.JF_HOST` must be the **same host** you use in the browser to open Artifactory (hostname only, e.g. `artifactory.example.org`). The workflow builds `JF_URL` as `https://<JF_HOST>/`.
 
-If the CLI is pointed at **another** instance (typo, old variable, or duplicate deployment), the API will not list `dev-npm` even though it exists elsewhere. The **Verify JFrog connection** step lists **npm-related repository keys** visible to **`JF_ACCESS_TOKEN`**: **`curl`** IAP ping on **`JF_PUBLIC_URL`** when **`IAP_GOOGLE_JWT`** is set, then **`jf rt curl`** on **`JF_URL`** (requires **`JF_HOST_CLI`** when the public host is behind IAP — see below). If `dev-npm` is missing from that list, fix **URL**, **token scope**, or **Project / permission** assignment before changing `--repo-resolve` names.
+If the CLI is pointed at **another** instance (typo, old variable, or duplicate deployment), the API will not list `dev-npm` even though it exists elsewhere. The **Verify JFrog connection** step lists **npm-related repository keys** visible to **`JF_ACCESS_TOKEN`**: when **`IAP_GOOGLE_JWT`** is set, it **`curl`**s **`JF_PUBLIC_URL`** with **`Proxy-Authorization`** (IAP) and **`Authorization`** (JFrog), then runs **`jf rt curl`** against **`JF_URL`** (local proxy or **`JF_HOST_CLI`**). If `dev-npm` is missing from that list, fix **URL**, **token scope**, or **Project / permission** assignment before changing `--repo-resolve` names.
 
 ## `401 Unauthorized` — `Invalid IAP credentials: JWT signature is invalid`
 
@@ -43,7 +51,7 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 
 **Why `X-JFrog-Art-Api` is not enough:** JFrog **Platform access tokens** are normally sent as **`Authorization: Bearer <token>`**. Putting the same token in **`X-JFrog-Art-Api`** (meant for legacy API keys) can produce Artifactory errors such as **`Props Authentication Token not found`** — IAP was satisfied, but Artifactory did not accept that auth style for the REST API.
 
-**This repo’s approach:** set **`vars.JF_HOST_CLI`** (GitHub: **Settings → Secrets and variables → Actions → Variables**) to a hostname for the **same** instance where **`jf`** can use **`Authorization: Bearer`** alone (no IAP on that host). It **must differ** from **`vars.JF_HOST`**. The workflow pings **`JF_PUBLIC_URL`** (`vars.JF_HOST`) with **`IAP_GOOGLE_JWT`**, then runs **`jf`** against **`JF_URL`** (`https://<JF_HOST_CLI>/` when set).
+**This repo’s approaches:** (a) leave **`vars.JF_HOST_CLI`** empty and use the **local IAP forward proxy** so **`jf`** talks to `http://127.0.0.1:<port>/` while the verify step proves **`JF_PUBLIC_URL`** with both headers; or (b) set **`vars.JF_HOST_CLI`** (GitHub: **Settings → Secrets and variables → Actions → Variables**) to a hostname for the **same** instance where **`jf`** can use **`Authorization: Bearer`** alone (no IAP on that host). **`JF_HOST_CLI`** **must differ** from **`vars.JF_HOST`** when you use that path. The workflow runs **`jf`** against **`JF_URL`** (`http://127.0.0.1:.../` or `https://<JF_HOST_CLI>/` accordingly).
 
 ### If you cannot expose “a backend without IAP” (or it would not be public)
 
@@ -55,17 +63,13 @@ This response is produced by **Google Cloud IAP** in front of your hostname, **n
 
 3. **Path- or service-splitting at the load balancer** (platform team): e.g. browser UI behind IAP while a **separate backend or URL map** exposes Artifactory API/registry to trusted sources only. That is still “another route” than pure IAP-on-`Authorization`, even if you do not call it a second “public” site.
 
-What **does not** work with GitHub-hosted runners and the stock **`jf`** client: a **single** hostname where **every** HTTPS request must present a **Google IAP JWT** in `Authorization` **and** Artifactory must see **`Authorization: Bearer` (JFrog)** — one header cannot carry both.
+Google documents putting the **IAP OIDC token** in **`Proxy-Authorization`** so **`Authorization`** remains available for the **origin** (Artifactory). That is exactly the dual-header pattern **`curl`** can send; **`jf`** still needs either **`JF_HOST_CLI`** or the **local forward proxy** in this workflow because the CLI does not add **`Proxy-Authorization`** itself.
 
-**Implication:** if only a **single** IAP-protected hostname exists and you cannot add a CI-facing hostname, **`jf`** from GitHub-hosted runners will not match a supported dual-auth pattern; options remain:
+**Implication:** a **single public hostname** can be enough for **API** access from GitHub-hosted runners if IAP accepts **`Proxy-Authorization`** on your load balancer and you use the **proxy** path (or **`JF_HOST_CLI`**). Remaining constraints are operational (TLS, Docker **`insecure-registries`** for the local HTTP endpoint, and **SLSA container provenance**: the reusable provenance job runs on **another** runner and cannot pull an image that exists only as `127.0.0.1:...` on the first runner, so the workflow **skips** that job when the local proxy mode is active).
 
-- a hostname or path for **API / CI** that is **not** behind IAP (subject to security review), or  
-- **Self-hosted GitHub runners** (or VPN) so CI traffic does not hit public IAP like a random Internet client, or  
-- **Programmatic IAP** (service account or workload identity issuing tokens for your IAP OAuth client audience) — see [Google Cloud IAP authentication overview](https://cloud.google.com/iap/docs/authentication-howto).
+Other org-level options still apply: **self-hosted runners**, **VPC / allowlisted** CI endpoints, **Programmatic IAP** (WIF) — see [Google Cloud IAP authentication overview](https://cloud.google.com/iap/docs/authentication-howto) and [iap-programmatic-auth-github-actions.md](iap-programmatic-auth-github-actions.md).
 
-**Step-by-step (GitHub Actions + audience OAuth + SA / WIF) :** [iap-programmatic-auth-github-actions.md](iap-programmatic-auth-github-actions.md).
-
-For **`jf`** itself (not raw `curl`), traffic must still reach Artifactory in a way compatible with how the CLI sends **`Authorization`** — otherwise steps after **Verify** (npm, Docker, build info, etc.) can fail even when **Verify** passes.
+For **`jf`** and Docker, traffic must reach Artifactory in a way compatible with how those clients send **`Authorization`** — the forward proxy adds **`Proxy-Authorization`** only on the hop from the runner to **`https://<JF_HOST>`**.
 
 ## References
 

@@ -21,14 +21,16 @@ jobs:
       # Public/browser hostname (IAP). WIF + curl ping this URL.
       JF_PUBLIC_HOST: ${{ vars.JF_HOST }}
       JF_PUBLIC_URL: ${{ format('https://{0}/', vars.JF_HOST) }}
-      # Registry + jf API: must allow Authorization: Bearer <JFrog token>. If Artifactory is behind IAP,
-      # set vars.JF_HOST_CLI to another hostname for the same instance (internal LB, no IAP on that host).
+      # Default: same host for registry/jf. Overridden by GITHUB_ENV when using local IAP proxy or JF_HOST_CLI.
       JF_REGISTRY_HOST: ${{ vars.JF_HOST_CLI != '' && vars.JF_HOST_CLI || vars.JF_HOST }}
       JF_URL: ${{ format('https://{0}/', vars.JF_HOST_CLI != '' && vars.JF_HOST_CLI || vars.JF_HOST) }}
+      JF_IAP_PROXY_MODE: "false"
+      JF_IAP_PROXY_PORT: "18081"
       JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
     outputs:
       image: ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
       digest: ${{ steps.build.outputs.digest }}
+      skip_provenance: ${{ steps.job-flags.outputs.skip_provenance }}
     steps:
       - name: Checkout the repository    
         uses: actions/checkout@v4
@@ -86,6 +88,50 @@ jobs:
               gh.write(f"IAP_GOOGLE_JWT={jwt}\n")
           print("::add-mask::" + jwt)
           PY
+      # IAP can validate the Google OIDC JWT in Proxy-Authorization so Authorization stays Bearer <JFrog>.
+      # jf does not send Proxy-Authorization; we start a local forwarder that adds it. See docs/github-actions-jfrog-iap.md
+      - name: Configure JFrog URL for IAP (Proxy-Authorization or JF_HOST_CLI)
+        if: vars.IAP_USE_WIF == 'true'
+        env:
+          IAP_GOOGLE_JWT: ${{ env.IAP_GOOGLE_JWT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${IAP_GOOGLE_JWT:-}" ]; then
+            echo "No IAP_GOOGLE_JWT; skipping IAP URL configuration."
+            exit 0
+          fi
+          JF_CLI="${{ vars.JF_HOST_CLI }}"
+          if [ -n "${JF_CLI}" ]; then
+            echo "JF_IAP_PROXY_MODE=false" >> "${GITHUB_ENV}"
+            echo "Using JF_HOST_CLI for jf/Docker (split DNS): ${JF_CLI}"
+            exit 0
+          fi
+          echo "Starting local IAP forward proxy (IAP JWT in Proxy-Authorization) for jf/Docker ..."
+          export JF_UPSTREAM_HOST="${{ vars.JF_HOST }}"
+          nohup python3 "${GITHUB_WORKSPACE}/scripts/iap-jf-forward-proxy.py" >> /tmp/iap-jf-proxy.log 2>&1 &
+          echo $! > /tmp/iap-jf-proxy.pid
+          PORT="${JF_IAP_PROXY_PORT:-18081}"
+          for _ in $(seq 1 100); do
+            if (echo >/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null; then break; fi
+            sleep 0.1
+          done
+          if ! (echo >/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null; then
+            echo "::error::Local IAP proxy did not listen on 127.0.0.1:${PORT}. Log:"
+            cat /tmp/iap-jf-proxy.log || true
+            exit 1
+          fi
+          echo "JF_URL=http://127.0.0.1:${PORT}/" >> "${GITHUB_ENV}"
+          echo "JF_REGISTRY_HOST=127.0.0.1:${PORT}" >> "${GITHUB_ENV}"
+          echo "JF_IAP_PROXY_MODE=true" >> "${GITHUB_ENV}"
+          echo "Docker: allow insecure registry 127.0.0.1:${PORT} (HTTP) for push/pull via proxy"
+          sudo mkdir -p /etc/docker
+          REG="127.0.0.1:${PORT}"
+          if [ -f /etc/docker/daemon.json ]; then
+            sudo python3 -c "import json; from pathlib import Path; r='${REG}'; p=Path('/etc/docker/daemon.json'); d=json.loads(p.read_text()); ir=d.setdefault('insecure-registries', []); ir.append(r) if r not in ir else None; p.write_text(json.dumps(d))"
+          else
+            echo "{\"insecure-registries\":[\"${REG}\"]}" | sudo tee /etc/docker/daemon.json >/dev/null
+          fi
+          sudo systemctl restart docker || sudo service docker restart
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
       -
@@ -100,9 +146,8 @@ jobs:
         env:
           JF_PROJECT: ${{ vars.JF_PROJECT_KEY }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
-      # IAP validates Authorization as a Google ID token. jf sends JF_ACCESS_TOKEN (JFrog) in the same
-      # header — the LB often rejects it with "JWT signature is invalid" before Artifactory runs.
-      # Use curl+IAP_GOOGLE_JWT to test IAP; jf may need a non-IAP hostname or platform change.
+      # IAP can accept the Google OIDC JWT in Proxy-Authorization so Authorization stays Bearer <JFrog>.
+      # curl validates both headers on JF_PUBLIC_URL; jf uses JF_URL (local proxy or JF_HOST_CLI). See docs/github-actions-jfrog-iap.md
       - name: Verify JFrog connection and visible repositories
         env:
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
@@ -111,25 +156,40 @@ jobs:
           set -euo pipefail
           echo "JF_PUBLIC_HOST / JF_PUBLIC_URL (IAP / browser): ${JF_PUBLIC_HOST} → ${JF_PUBLIC_URL}"
           echo "JF_REGISTRY_HOST / JF_URL (jf + Docker): ${JF_REGISTRY_HOST} → ${JF_URL}"
-          echo "Repository variables: JF_HOST='${{ vars.JF_HOST }}' JF_HOST_CLI='${{ vars.JF_HOST_CLI }}' (if empty, add JF_HOST_CLI under Settings → Actions → Variables)"
+          echo "JF_IAP_PROXY_MODE=${JF_IAP_PROXY_MODE:-false}"
+          echo "Repository variables: JF_HOST='${{ vars.JF_HOST }}' JF_HOST_CLI='${{ vars.JF_HOST_CLI }}' (optional second hostname; see docs)"
           if [ -n "${IAP_GOOGLE_JWT:-}" ]; then
-            echo "--- IAP: ping on JF_PUBLIC_URL (Google ID token only) ---"
-            code=$(curl -sS -o /dev/null -w "%{http_code}" \
-              -H "Authorization: Bearer ${IAP_GOOGLE_JWT}" \
+            echo "--- IAP: curl two-header test on JF_PUBLIC_URL (Proxy-Authorization + Authorization) ---"
+            code_ping=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Proxy-Authorization: Bearer ${IAP_GOOGLE_JWT}" \
+              -H "Authorization: Bearer ${JF_ACCESS_TOKEN}" \
               "${JF_PUBLIC_URL}artifactory/api/system/ping" || echo "000")
-            echo "ping HTTP ${code} (expect 2xx when IAP allows this SA)"
-            if [ "${JF_HAVE_CLI_HOST}" != "true" ]; then
-              echo "::error::Add repository variable JF_HOST_CLI (hostname only, different from JF_HOST) pointing at the same Artifactory without IAP in front of Bearer JFrog tokens. GitHub: Settings → Secrets and variables → Actions → Variables. Platform tokens use Authorization: Bearer; IAP on the same host cannot be combined. See docs/github-actions-jfrog-iap.md"
-              exit 1
-            fi
-            if [ "${JF_REGISTRY_HOST}" = "${JF_PUBLIC_HOST}" ]; then
-              echo "::error::JF_HOST_CLI must not equal JF_HOST (both are '${JF_REGISTRY_HOST}'). Use a second DNS name / backend for the same Artifactory that does not enforce IAP on Authorization."
-              exit 1
-            fi
-            echo "--- Repositories: jf (Bearer JFrog only) on JF_URL — JF_HOST_CLI differs from JF_HOST ---"
-            jf rt ping
-            if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
-              echo "::error::Could not list repositories — check JF_HOST_CLI, token scope, or Project access."
+            echo "ping HTTP ${code_ping} (expect 2xx when IAP allows this SA)"
+            code_repos=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Proxy-Authorization: Bearer ${IAP_GOOGLE_JWT}" \
+              -H "Authorization: Bearer ${JF_ACCESS_TOKEN}" \
+              "${JF_PUBLIC_URL}artifactory/api/repositories" || echo "000")
+            echo "repositories HTTP ${code_repos}"
+            if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
+              echo "--- jf via local IAP forward proxy (localhost) ---"
+              jf rt ping
+              if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
+                echo "::error::Could not list repositories — check token scope, Project access, or /tmp/iap-jf-proxy.log on the runner."
+                exit 1
+              fi
+            elif [ "${JF_HAVE_CLI_HOST}" = "true" ]; then
+              if [ "${JF_REGISTRY_HOST}" = "${JF_PUBLIC_HOST}" ]; then
+                echo "::error::JF_HOST_CLI must not equal JF_HOST (both are '${JF_REGISTRY_HOST}')."
+                exit 1
+              fi
+              echo "--- Repositories: jf on JF_URL (JF_HOST_CLI path) ---"
+              jf rt ping
+              if ! jf rt curl -sS "/artifactory/api/repositories" -o repos.json; then
+                echo "::error::Could not list repositories — check JF_HOST_CLI, token scope, or Project access."
+                exit 1
+              fi
+            else
+              echo "::error::IAP is enabled but neither the local IAP proxy nor JF_HOST_CLI is active. For a single public hostname, clear JF_HOST_CLI so the workflow starts the forward proxy, or set JF_HOST_CLI to a second hostname. See docs/github-actions-jfrog-iap.md"
               exit 1
             fi
           else
@@ -179,7 +239,9 @@ jobs:
           echo "digest=$(docker images --no-trunc --quiet ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }})" >> $GITHUB_OUTPUT
           jf docker pull ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}
           jf docker scan --fail=false  --threads=5 ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }} --severity='HIGH,CRITICAL' --vuln --format=sarif > jfrog_docker_scan.sarif
-          sed -i s/"\"uri\": \"\""/"\"uri\": \"https:\/\/${{ env.JF_REGISTRY_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}:${{ github.run_number }}\""/g jfrog_docker_scan.sarif
+          SCHEME=https
+          if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then SCHEME=http; fi
+          sed -i s/"\"uri\": \"\""/"\"uri\": \"${SCHEME}:\/\/${{ env.JF_REGISTRY_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}:${{ github.run_number }}\""/g jfrog_docker_scan.sarif
         # adding the built docker into the JFrog build info     
       - name: Upload output to generate autofix
         uses: github/codeql-action/upload-sarif@v3
@@ -211,8 +273,19 @@ jobs:
            jf evd create --predicate ./feature.json --predicate-type=https://jfrog.com/evidence/test-results/v1 \
            --release-bundle RlmEjsDemo  --release-bundle-version 1.${{ github.run_number }}.0 \
            --key private.pem  --key-alias ejs-frog-demo --project=${{ vars.JF_PROJECT_KEY }} --markdown feature-flags.md
+      # SLSA provenance job pulls by image reference from another runner; localhost registry is not reachable there.
+      - name: Export job flags (SLSA provenance)
+        id: job-flags
+        if: success()
+        run: |
+          if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
+            echo "skip_provenance=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "skip_provenance=false" >> "${GITHUB_OUTPUT}"
+          fi
   provenance:
         needs: [gh-ejs-demo]
+        if: ${{ needs.gh-ejs-demo.outputs.skip_provenance != 'true' }}
         uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0
         with:
           image:  ${{ needs.gh-ejs-demo.outputs.image }}
