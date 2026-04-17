@@ -17,19 +17,38 @@ Crée ou met à jour les **variables de configuration** du dépôt GitHub (`Sett
 ## Prérequis
 
 - [Terraform](https://www.terraform.io/) >= 1.3  
-- Un [Personal Access Token](https://github.com/settings/tokens) GitHub avec accès au dépôt cible (**repo** pour un dépôt privé, ou fine-grained avec *Variables* en lecture/écriture).
+- Accès à l’API GitHub avec droits sur les **Actions variables** du dépôt.
+
+**Token sans copier un PAT à la main** : si [GitHub CLI](https://cli.github.com/) est connecté (`gh auth login`), utilise le jeton de session :
+
+```bash
+export TF_VAR_github_token="$(gh auth token -h github.com)"
+```
+
+Sinon, un [PAT](https://github.com/settings/tokens) classique avec scope **repo** (dépôt privé) convient aussi.
 
 ## Utilisation
 
 ```bash
 cd terraform/github-actions-variables
 cp terraform.tfvars.example terraform.tfvars
-# Éditer terraform.tfvars ; pour le token :
-export TF_VAR_github_token=ghp_...
+# Éditer terraform.tfvars (sans commit : fichier gitignoré)
+export TF_VAR_github_token="$(gh auth token -h github.com)"
 
 terraform init
 terraform plan
 terraform apply
+```
+
+### Variables déjà créées dans l’UI GitHub
+
+Si `terraform apply` renvoie **409 Already exists**, importer chaque variable puis réappliquer :
+
+```bash
+export TF_VAR_github_token="$(gh auth token -h github.com)"
+terraform import 'github_actions_variable.repo["JF_HOST"]' 'ejs-frog-demo:JF_HOST'
+# … répéter pour chaque clé (format ID : `<nom_du_depot>:<NOM_VARIABLE>`)
+terraform plan   # doit afficher « No changes »
 ```
 
 Le provider **`integrations/github`** utilise `owner` + nom de dépôt ; voir [`variables.tf`](variables.tf).

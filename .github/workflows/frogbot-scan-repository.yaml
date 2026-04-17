@@ -28,87 +28,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
-      - name: Authenticate to Google Cloud (WIF)
-        if: vars.IAP_USE_WIF == 'true'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
-      - name: Set up gcloud CLI
-        if: vars.IAP_USE_WIF == 'true'
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-      - name: Issue Google ID token for IAP audience
-        if: vars.IAP_USE_WIF == 'true'
-        env:
-          IAP_OAUTH_CLIENT_ID: ${{ vars.IAP_OAUTH_CLIENT_ID }}
-          GCP_WIF_SERVICE_ACCOUNT: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          import json, os, subprocess, urllib.error, urllib.request
-          from urllib.parse import quote
-
-          sa = os.environ["GCP_WIF_SERVICE_ACCOUNT"].strip()
-          aud = os.environ["IAP_OAUTH_CLIENT_ID"].strip()
-          access = subprocess.check_output(
-              ["gcloud", "auth", "print-access-token"], text=True
-          ).strip()
-          url = (
-              "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
-              + quote(sa, safe="")
-              + ":generateIdToken"
-          )
-          body = json.dumps({"audience": aud, "includeEmail": True}).encode()
-          req = urllib.request.Request(url, data=body, method="POST")
-          req.add_header("Authorization", f"Bearer {access}")
-          req.add_header("Content-Type", "application/json")
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  out = json.load(resp)
-          except urllib.error.HTTPError as e:
-              raise SystemExit(f"generateIdToken failed HTTP {e.code}: {e.read().decode()}")
-          jwt = out.get("token")
-          if not jwt:
-              raise SystemExit(f"no token in response: {out}")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as gh:
-              gh.write(f"IAP_GOOGLE_JWT={jwt}\n")
-          print("::add-mask::" + jwt)
-          PY
       # Frogbot uses JF_URL like jf — no Proxy-Authorization; local forwarder adds IAP JWT upstream.
-      - name: Configure JFrog URL for IAP (proxy or JF_HOST_CLI)
-        if: vars.IAP_USE_WIF == 'true'
-        env:
-          IAP_GOOGLE_JWT: ${{ env.IAP_GOOGLE_JWT }}
-        run: |
-          set -euo pipefail
-          if [ -z "${IAP_GOOGLE_JWT:-}" ]; then
-            echo "No IAP_GOOGLE_JWT; keeping job default JF_URL."
-            exit 0
-          fi
-          JF_CLI="${{ vars.JF_HOST_CLI }}"
-          if [ -n "${JF_CLI}" ]; then
-            echo "JF_IAP_PROXY_MODE=false" >> "${GITHUB_ENV}"
-            echo "Using JF_HOST_CLI for Frogbot: ${JF_CLI}"
-            exit 0
-          fi
-          echo "Starting local IAP forward proxy for Frogbot (API only; no Docker daemon change) ..."
-          export JF_UPSTREAM_HOST="${{ vars.JF_HOST }}"
-          nohup python3 "${GITHUB_WORKSPACE}/scripts/iap-jf-forward-proxy.py" >> /tmp/iap-jf-proxy.log 2>&1 &
-          echo $! > /tmp/iap-jf-proxy.pid
-          PORT="${JF_IAP_PROXY_PORT:-18081}"
-          for _ in $(seq 1 100); do
-            if (echo >/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null; then break; fi
-            sleep 0.1
-          done
-          if ! (echo >/dev/tcp/127.0.0.1/${PORT}) 2>/dev/null; then
-            echo "::error::Local IAP proxy did not listen on 127.0.0.1:${PORT}. Log:"
-            cat /tmp/iap-jf-proxy.log || true
-            exit 1
-          fi
-          echo "JF_URL=http://127.0.0.1:${PORT}/" >> "${GITHUB_ENV}"
-          echo "JF_IAP_PROXY_MODE=true" >> "${GITHUB_ENV}"
+      - name: JFrog IAP setup (WIF + local proxy, API only)
+        uses: ./.github/actions/jfrog-iap-setup
+        with:
+          iap_enabled: ${{ vars.IAP_USE_WIF }}
+          gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+          iap_oauth_client_id: ${{ vars.IAP_OAUTH_CLIENT_ID }}
+          jf_host: ${{ vars.JF_HOST }}
+          jf_host_cli: ${{ vars.JF_HOST_CLI }}
+          proxy_port: "18081"
+          with_docker: "false"
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          gcp_wif_service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
       - uses: jfrog/frogbot@v2
         env:
           JF_CLI_LOG_LEVEL: "DEBUG"

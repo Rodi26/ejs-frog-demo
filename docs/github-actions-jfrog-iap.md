@@ -16,6 +16,42 @@ That pattern matches the [JFrog GitHub Actions example](https://docs.jfrog.com/i
 
 **Frogbot** ([`frogbot-scan-repository.yaml`](../.github/workflows/frogbot-scan-repository.yaml), [`frogbot-scan-pr.yaml`](../.github/workflows/frogbot-scan-pr.yaml)) uses the same rules: when **`vars.IAP_USE_WIF`** is **`true`**, the workflow issues an IAP JWT (WIF + IAM Credentials `generateIdToken`), then either sets **`JF_URL`** to **`https://<JF_HOST_CLI>/`** or starts the local forwarder and sets **`JF_URL`** to **`http://127.0.0.1:<port>/`**. Frogbot only needs HTTP(S) to Artifactory (no Docker), so those workflows **do not** modify **`daemon.json`**. **`pull_request_target`** jobs must **`actions/checkout`** before the proxy step so [`scripts/iap-jf-forward-proxy.py`](../scripts/iap-jf-forward-proxy.py) exists on the runner.
 
+### Composite action (this repo)
+
+The shared steps (**WIF auth**, **gcloud**, **mint IAP JWT**, **configure `JF_URL` / proxy / optional Docker**) live in **[`.github/actions/jfrog-iap-setup`](../.github/actions/jfrog-iap-setup/action.yml)**:
+
+- **`scripts/mint-iap-google-jwt.py`** — IAM Credentials `generateIdToken` → **`IAP_GOOGLE_JWT`** in `GITHUB_ENV` (name avoids `*token*` so `setup-jfrog-cli` does not strip it).
+- **`scripts/configure-jfrog-iap-proxy.sh`** — split DNS (`JF_HOST_CLI`) or local forwarder; **`with_docker: "true"`** (main pipeline) also sets **`JF_REGISTRY_HOST`**, **`daemon.json`**, and restarts Docker; **`"false"`** (Frogbot) is API-only.
+
+### Variable precedence (GitHub Actions)
+
+Order (highest wins when the same name exists in more than one place): **Environment** → **Repository** → **Organization**. Secrets follow the same idea for **Environment** vs **Repository** vs **Organization**. See [Variables](https://docs.github.com/en/actions/learn-github-actions/variables) and [Secrets](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions).
+
+So if the job uses **`environment: my-env`**, variables and secrets defined on **that** GitHub Environment override repository-level **`vars.*`** / **`secrets.*`** with the **same name**. Variables you do **not** set on the Environment keep falling back to repository (and then organization) values.
+
+### GitHub Environments (optional, `gh-ejs-demo`)
+
+[`workflow.yml`](../.github/workflows/workflow.yml) exposes an optional **`workflow_dispatch`** input **`environment`**. The job does **not** set **`jobs.*.environment`** by default: an empty **`environment:`** name is invalid, and the same workflow also runs on **`schedule`**, where **`github.event.inputs`** does not apply—so you cannot express “omit the key on schedule, set it on dispatch” in one YAML line without duplicating jobs or workflows.
+
+**Ways to use Environment-scoped vars:**
+
+1. **Manual runs only** — Add under **`jobs.gh-ejs-demo`**: **`environment: ${{ github.event.inputs.environment }}`** and trigger with **Run workflow**, passing the Environment name. Ensure scheduled runs either use a **second workflow** without that line or rely on **repository** variables only.
+2. **All triggers** — Set **`environment: <fixed-name>`** on the job and create that [GitHub Environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment); put overrides there. Scheduled runs then use that Environment too.
+3. **Repository variables only** — Leave **`environment`** unset and keep using **Settings → Secrets and variables → Actions → Variables** at repo level (what this repo documents as **`vars.JF_HOST`**, etc.).
+
+### Reusing in another repository (e.g. WebGoat)
+
+Copy the same building blocks and wire **`vars` / `secrets`** in the target repo:
+
+| Path | Role |
+|------|------|
+| [`.github/actions/jfrog-iap-setup/`](../.github/actions/jfrog-iap-setup/action.yml) | Composite (WIF + mint + configure) |
+| [`scripts/mint-iap-google-jwt.py`](../scripts/mint-iap-google-jwt.py) | IAP JWT |
+| [`scripts/configure-jfrog-iap-proxy.sh`](../scripts/configure-jfrog-iap-proxy.sh) | `JF_URL` / proxy / optional Docker |
+| [`scripts/iap-jf-forward-proxy.py`](../scripts/iap-jf-forward-proxy.py) | Local forwarder (Proxy-Authorization) |
+
+Then add a **`checkout`** step **before** the composite, and pass **`jf_host`**, **`jf_host_cli`**, **`with_docker`**, and WIF-related **`inputs`** like in [`workflow.yml`](../.github/workflows/workflow.yml) or the Frogbot workflows. Align **repository variables** (`JF_HOST`, `JF_HOST_CLI`, `IAP_USE_WIF`, `GCP_PROJECT_ID`, `IAP_OAUTH_CLIENT_ID`, `JF_PROJECT_KEY`, …) and **secrets** (`WORKLOAD_IDENTITY_PROVIDER`, `GCP_WIF_SERVICE_ACCOUNT`, `JF_ACCESS_TOKEN`, …) with the target instance.
+
 **There was no IAP documentation in this repository before** the first version of this file; the playbook is [playbook-iap-github-actions.md](playbook-iap-github-actions.md).
 
 ## IAP and failures like “JFrog CLI exited with exit code 1”
