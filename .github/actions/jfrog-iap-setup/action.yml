@@ -1,8 +1,6 @@
 name: JFrog IAP setup (WIF)
 description: >
   Google WIF auth, gcloud, mint IAP Google JWT, and configure JF_URL via JF_HOST_CLI or local IAP forward proxy.
-runs:
-  using: composite
 inputs:
   iap_enabled:
     description: "Enable IAP path (e.g. vars.IAP_USE_WIF == 'true')"
@@ -35,34 +33,36 @@ inputs:
     description: WIF service account email (secrets.GCP_WIF_SERVICE_ACCOUNT)
     required: true
 
-steps:
-  - name: Authenticate to Google Cloud (WIF)
-    if: inputs.iap_enabled == 'true'
-    uses: google-github-actions/auth@v2
-    with:
-      workload_identity_provider: ${{ inputs.workload_identity_provider }}
-      service_account: ${{ inputs.gcp_wif_service_account }}
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud (WIF)
+      if: inputs.iap_enabled == 'true'
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.gcp_wif_service_account }}
 
-  - name: Set up gcloud CLI
-    if: inputs.iap_enabled == 'true'
-    uses: google-github-actions/setup-gcloud@v2
-    with:
-      project_id: ${{ inputs.gcp_project_id }}
+    - name: Set up gcloud CLI
+      if: inputs.iap_enabled == 'true'
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ inputs.gcp_project_id }}
 
-  - name: Issue Google ID token for IAP audience
-    if: inputs.iap_enabled == 'true'
-    shell: bash
-    env:
-      IAP_OAUTH_CLIENT_ID: ${{ inputs.iap_oauth_client_id }}
-      GCP_WIF_SERVICE_ACCOUNT: ${{ inputs.gcp_wif_service_account }}
-    run: python3 "${GITHUB_WORKSPACE}/scripts/mint-iap-google-jwt.py"
+    - name: Issue Google ID token for IAP audience
+      if: inputs.iap_enabled == 'true'
+      shell: bash
+      env:
+        IAP_OAUTH_CLIENT_ID: ${{ inputs.iap_oauth_client_id }}
+        GCP_WIF_SERVICE_ACCOUNT: ${{ inputs.gcp_wif_service_account }}
+      run: python3 "${GITHUB_WORKSPACE}/scripts/mint-iap-google-jwt.py"
 
-  - name: Configure JFrog URL for IAP (proxy or JF_HOST_CLI)
-    if: inputs.iap_enabled == 'true'
-    shell: bash
-    env:
-      JF_HOST: ${{ inputs.jf_host }}
-      JF_HOST_CLI: ${{ inputs.jf_host_cli }}
-      JF_IAP_PROXY_PORT: ${{ inputs.proxy_port }}
-      WITH_DOCKER: ${{ inputs.with_docker }}
-    run: bash "${GITHUB_WORKSPACE}/scripts/configure-jfrog-iap-proxy.sh"
+    - name: Configure JFrog URL for IAP (proxy or JF_HOST_CLI)
+      if: inputs.iap_enabled == 'true'
+      shell: bash
+      env:
+        JF_HOST: ${{ inputs.jf_host }}
+        JF_HOST_CLI: ${{ inputs.jf_host_cli }}
+        JF_IAP_PROXY_PORT: ${{ inputs.proxy_port }}
+        WITH_DOCKER: ${{ inputs.with_docker }}
+      run: bash "${GITHUB_WORKSPACE}/scripts/configure-jfrog-iap-proxy.sh"
