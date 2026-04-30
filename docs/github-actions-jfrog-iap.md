@@ -52,6 +52,17 @@ Copy the same building blocks and wire **`vars` / `secrets`** in the target repo
 
 Then add a **`checkout`** step **before** the composite, and pass **`jf_host`**, **`jf_host_cli`**, **`with_docker`**, and WIF-related **`inputs`** like in [`workflow.yml`](../.github/workflows/workflow.yml) or the Frogbot workflows. Align **repository variables** (`JF_HOST`, `JF_HOST_CLI`, `IAP_USE_WIF`, `GCP_PROJECT_ID`, `IAP_OAUTH_CLIENT_ID`, `JF_PROJECT_KEY`, …) and **secrets** (`WORKLOAD_IDENTITY_PROVIDER`, `GCP_WIF_SERVICE_ACCOUNT`, `JF_ACCESS_TOKEN`, …) with the target instance.
 
+#### WebGoat: three JFrog environments, one IAP host
+
+WebGoat is wired to **three** JFrog instances. Only **`https://artifactory.rodolphef.org/`** (hostname **`artifactory.rodolphef.org`**) sits behind **Google IAP** (browser “Sign in with Google” on that URL). The **other two** instances are **not** IAP-fronted from CI’s perspective: do **not** run the WIF + IAP JWT + forward-proxy path for them.
+
+| Target | IAP | Typical `vars` |
+|--------|-----|----------------|
+| **`artifactory.rodolphef.org`** | Yes | `IAP_USE_WIF=true`, `JF_HOST=artifactory.rodolphef.org`, plus WIF secrets and `IAP_OAUTH_CLIENT_ID`; use composite + proxy or `JF_HOST_CLI` as in this repo. |
+| **Other JFrog A / B** | No | `IAP_USE_WIF=false` (or omit the composite step behind `if: vars.IAP_USE_WIF == 'true'`). Set **`JF_URL`** / **`JF_HOST`** to that instance’s hostname only; plain **`jf`** + **`JF_ACCESS_TOKEN`** is enough. |
+
+**Suggested layout in the WebGoat repo:** three [GitHub Environments](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) (e.g. one per JFrog instance), each with its own **`JF_HOST`**, **`JF_PROJECT_KEY`**, **`IAP_USE_WIF`**, and **`JF_ACCESS_TOKEN`** (or token secret) as needed. **Only** the environment that points at **`artifactory.rodolphef.org`** sets **`IAP_USE_WIF=true`** and the WIF-related secrets. Jobs use **`environment: <name>`** or a **matrix** so each run selects **one** instance and the right flags.
+
 **There was no IAP documentation in this repository before** the first version of this file; the playbook is [playbook-iap-github-actions.md](playbook-iap-github-actions.md).
 
 ## IAP and failures like “JFrog CLI exited with exit code 1”

@@ -159,11 +159,28 @@ jobs:
         run: |
           set -euo pipefail
           echo "NPM via JFrog: install uses committed package-lock.json (jf npm ci) — much faster than deleting the lock and jf npm i."
+          # jf npmc has no --retries; transient 502 via IAP proxy → retry whole command with backoff.
+          retry_jf_npmc() {
+            local max=5 n=1 wait=15
+            while [ "$n" -le "$max" ]; do
+              if "$@"; then
+                return 0
+              fi
+              if [ "$n" -eq "$max" ]; then
+                echo "::error::Failed after ${max} attempts: $*"
+                return 1
+              fi
+              echo "::warning::jf npmc attempt ${n} failed; sleeping ${wait}s before retry..."
+              sleep "$wait"
+              n=$((n + 1))
+              wait=$((wait + 15))
+            done
+          }
           jf rt bce 
           jf rt bag
-          jf npmc --repo-resolve dev-npm
+          retry_jf_npmc jf npmc --repo-resolve dev-npm
           jf ca
-          jf npmc --repo-resolve dev-npm-unsecure-remote
+          retry_jf_npmc jf npmc --repo-resolve dev-npm-unsecure-remote
           # npm ci follows package-lock "resolved" URLs verbatim. If they point at the IAP
           # hostname, npm would fetch without Proxy-Authorization → HTML/error bytes → tar corruption.
           if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
@@ -183,6 +200,10 @@ jobs:
               end
             '
           fi
+          export NPM_CONFIG_FETCH_RETRIES=10
+          export NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=30000
+          export NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
+          export NPM_CONFIG_FETCH_TIMEOUT=600000
           jf npm ci --omit dev
           jf audit --npm --fail=false
       
