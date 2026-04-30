@@ -155,12 +155,12 @@ jobs:
           warn "::warning::API list has no dev-npm — check vars.JF_HOST / JF_HOST_CLI, token scope, and Project access." unless ok
           RUBY
       - name: NPM Audit 
-        timeout-minutes: 30
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           echo "NPM via JFrog: install uses committed package-lock.json (jf npm ci) — much faster than deleting the lock and jf npm i."
-          # jf npmc has no --retries; transient 502 via IAP proxy → retry whole command with backoff.
-          retry_jf_npmc() {
+          # jf npmc / jf ca have limited internal HTTP retries; transient 502 via IAP proxy → retry whole command with backoff.
+          retry_with_backoff() {
             local max=5 n=1 wait=15
             while [ "$n" -le "$max" ]; do
               if "$@"; then
@@ -170,7 +170,7 @@ jobs:
                 echo "::error::Failed after ${max} attempts: $*"
                 return 1
               fi
-              echo "::warning::jf npmc attempt ${n} failed; sleeping ${wait}s before retry..."
+              echo "::warning::Attempt ${n} failed for: $* — sleeping ${wait}s before retry..."
               sleep "$wait"
               n=$((n + 1))
               wait=$((wait + 15))
@@ -178,9 +178,10 @@ jobs:
           }
           jf rt bce 
           jf rt bag
-          retry_jf_npmc jf npmc --repo-resolve dev-npm
-          jf ca
-          retry_jf_npmc jf npmc --repo-resolve dev-npm-unsecure-remote
+          retry_with_backoff jf npmc --repo-resolve dev-npm
+          # --threads 1 reduces parallel HEADs against the local IAP forwarder (502 under default concurrency).
+          retry_with_backoff jf ca --threads 1
+          retry_with_backoff jf npmc --repo-resolve dev-npm-unsecure-remote
           # npm ci follows package-lock "resolved" URLs verbatim. If they point at the IAP
           # hostname, npm would fetch without Proxy-Authorization → HTML/error bytes → tar corruption.
           if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then
