@@ -266,10 +266,31 @@ jobs:
         with:
           sarif_file: jfrog_docker_scan.sarif
       - name: Scan build
-        id: scan-build  
+        id: scan-build
+        timeout-minutes: 15
         run: |
-           jf build-scan --fail=false 
-           jf build-scan --fail=false --vuln
+          set -euo pipefail
+          # Xray indexes published builds asynchronously; brief wait avoids immediate 404 race (jfrog/jfrog-azure-devops-extension#596).
+          retry_with_backoff() {
+            local max=5 n=1 wait=15
+            while [ "$n" -le "$max" ]; do
+              if "$@"; then
+                return 0
+              fi
+              if [ "$n" -eq "$max" ]; then
+                echo "::error::Failed after ${max} attempts: $*"
+                return 1
+              fi
+              echo "::warning::Attempt ${n} failed for: $* — sleeping ${wait}s before retry..."
+              sleep "$wait"
+              n=$((n + 1))
+              wait=$((wait + 15))
+            done
+          }
+          sleep 10
+          # Policy violations only. Omit --vuln here: it polls 30–45+ min then 404/timeout behind IAP proxy;
+          # image vulnerabilities are already reported by jf docker scan --vuln (SARIF upload above).
+          retry_with_backoff jf build-scan --fail=false
       - name: Create test evidence
         id: create-evd  
         run: |
