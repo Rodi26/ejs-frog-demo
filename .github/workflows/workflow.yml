@@ -247,19 +247,24 @@ jobs:
       # docker xray scanning
       - name: docker Info
         id: docker-info
-        run: |  
+        run: |
+          set -euo pipefail
           # buildx --push does not load the image into the local engine; use the digest from build-push-action.
           echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
           # Pull by digest so we resolve the same manifest buildx pushed (tag pull + jf docker pull were flaky with IAP proxy / jf login).
           FULL="${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}"
           DIG="${{ steps.build.outputs.digest }}"
+          LOCAL_TAG="ejs-demo:${{ github.run_number }}"
           docker pull "${FULL%:*}@${DIG}"
           docker tag "${FULL%:*}@${DIG}" "${FULL}"
-          jf docker scan --fail=false  --threads=5 ${{ env.JF_REGISTRY_HOST }}/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }} --severity='HIGH,CRITICAL' --vuln --format=sarif > jfrog_docker_scan.sarif
-          SCHEME=https
-          if [ "${JF_IAP_PROXY_MODE:-false}" = "true" ]; then SCHEME=http; fi
-          # IMAGE_NAME already includes :<run_number> — do not append github.run_number again (would yield ejs-demo:163:163).
-          sed -i s/"\"uri\": \"\""/"\"uri\": \"${SCHEME}:\/\/${{ env.JF_REGISTRY_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}\""/g jfrog_docker_scan.sarif
+          docker tag "${FULL%:*}@${DIG}" "${LOCAL_TAG}"
+          # Scan the local engine tag. Passing the IAP proxy registry (127.0.0.1:18081/...) makes Xray submit
+          # docker://127.0.0.1:... to the server → 404. --repo-path ties the scan to the Artifactory artifact path.
+          jf docker scan --fail=false --threads=5 "${LOCAL_TAG}" \
+            --repo-path="${{ env.DOCKER_REPO }}/ejs-demo/" \
+            --severity='HIGH,CRITICAL' --vuln --format=sarif > jfrog_docker_scan.sarif
+          # SARIF uri: canonical public registry host (not localhost proxy).
+          sed -i s/"\"uri\": \"\""/"\"uri\": \"https:\/\/${{ env.JF_PUBLIC_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}\""/g jfrog_docker_scan.sarif
         # adding the built docker into the JFrog build info     
       - name: Upload output to generate autofix
         uses: github/codeql-action/upload-sarif@v3
