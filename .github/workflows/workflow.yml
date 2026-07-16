@@ -259,9 +259,8 @@ jobs:
           docker tag "${FULL%:*}@${DIG}" "${FULL}"
           docker tag "${FULL%:*}@${DIG}" "${LOCAL_TAG}"
           # Scan the local engine tag. Passing the IAP proxy registry (127.0.0.1:18081/...) makes Xray submit
-          # docker://127.0.0.1:... to the server → 404. --repo-path ties the scan to the Artifactory artifact path.
+          # docker://127.0.0.1:... to the server → 404. Policy scope comes from setup-jfrog-cli (--project via JF_PROJECT).
           jf docker scan --fail=false --threads=5 "${LOCAL_TAG}" \
-            --repo-path="${{ env.DOCKER_REPO }}/ejs-demo/" \
             --severity='HIGH,CRITICAL' --vuln --format=sarif > jfrog_docker_scan.sarif
           # SARIF uri: canonical public registry host (not localhost proxy).
           sed -i s/"\"uri\": \"\""/"\"uri\": \"https:\/\/${{ env.JF_PUBLIC_HOST }}\/${{ env.DOCKER_REPO }}\/${{ env.IMAGE_NAME }}\""/g jfrog_docker_scan.sarif
